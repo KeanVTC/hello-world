@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+
+    environment {
+        APP_NAME = "spring-hello"
+        JAR_NAME = "spring-hello-0.0.1-SNAPSHOT.jar"
+        CONTAINER_NAME = "spring-hello-container"
+        HOST_PORT = "8086"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/KeanVTC/hello-world.git'
+            }
+        }
+
+        stage('Build with Maven') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Deploy to Docker Tomcat') {
+            steps {
+                script {
+                    sh '''
+                    echo "Stopping old container if exists..."
+                    docker stop $CONTAINER_NAME || true
+                    docker rm $CONTAINER_NAME || true
+
+                    echo "Running new container..."
+                    docker run -d --name $CONTAINER_NAME \
+                      -p $HOST_PORT:8080 \
+                      -v $WORKSPACE/target/$JAR_NAME:/usr/local/tomcat/webapps/ROOT.war \
+                      tomcat:9-jdk17
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful! App is running at http://localhost:${env.HOST_PORT}/hello"
+        }
+        failure {
+            echo "❌ Build or deploy failed."
+        }
+    }
+}
