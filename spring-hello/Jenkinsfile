@@ -21,17 +21,18 @@ pipeline {
         }
 
         stage('Deploy to Docker Tomcat') {
-            steps {
-                dir('spring-hello') {
-                    bat '''
-                        docker build -t spring-hello .
-                        docker stop spring-hello-container || echo not running
-                        docker rm spring-hello-container || echo already removed
-                        docker run -d --name spring-hello-container -p 9090:8080 spring-hello
-                    '''
-                }
-            }
+    steps {
+        dir('spring-hello') {
+            bat '''
+                docker build -t spring-hello .
+                docker stop spring-hello-container || echo not running
+                docker rm spring-hello-container || echo already removed
+                docker run -d --name spring-hello-container -p 9090:8086 spring-hello
+            '''
         }
+    }
+}
+
     }
 
     post {
