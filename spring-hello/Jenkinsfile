@@ -3,7 +3,11 @@ pipeline {
 
     environment {
         CONTAINER_NAME = 'spring-hello-container'
-        TEST_PORT = '9090'
+        PROD_CONTAINER_NAME = 'spring-prod-container'
+        TEST_PORT = '8086'
+        PROD_PORT = '9091'
+        JAR_NAME = 'springboot-ci-demo-0.0.1-SNAPSHOT.jar'
+        IMAGE_NAME = 'springboot-ci-demo'
     }
 
     stages {
@@ -38,34 +42,39 @@ pipeline {
                     bat 'npx playwright test'
                 }
             }
-            post {
-                failure {
-                    echo "❌ Tests failed. Stopping container ${CONTAINER_NAME}..."
-                    bat "docker stop ${CONTAINER_NAME}"
-                }
-            }
         }
 
         stage('Stop Test Container') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
             steps {
                 echo "Stopping container ${CONTAINER_NAME}..."
                 bat "docker stop ${CONTAINER_NAME}"
+            }
+        }
+
+        stage('Deploy to Production Container') {
+            steps {
+                echo "Deploying production container on port ${PROD_PORT}..."
+                dir('spring-hello') {
+                    bat """
+                        docker build -t ${IMAGE_NAME}:prod .
+                        docker rm -f ${PROD_CONTAINER_NAME} || exit 0
+                        docker run -d --name ${PROD_CONTAINER_NAME} -p ${PROD_PORT}:8080 ${IMAGE_NAME}:prod
+                    """
+                }
             }
         }
     }
 
     post {
         success {
-            echo "✅ Pipeline passed: All E2E tests succeeded."
+            echo "✅ Pipeline passed: Tests succeeded and production deployed on port ${PROD_PORT}."
         }
         failure {
             echo "❌ Pipeline failed: One or more stages failed."
+            bat "docker stop ${CONTAINER_NAME} || exit 0"
         }
         always {
-            echo '📦 Test pipeline completed.'
+            echo '📦 CI/CD pipeline completed.'
         }
     }
 }
