@@ -5,8 +5,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class HelloController {
-    @GetMapping("/")
+
+    @GetMapping("/hello")
     public String hello() {
-        return "Spring Boot!"; // You can change this later
+        return "<h1>Spring Boot!</h1>"; // <- CORRECT spacing
     }
 }
