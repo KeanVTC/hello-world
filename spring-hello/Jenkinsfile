@@ -19,7 +19,7 @@ pipeline {
             steps {
                 echo "Starting existing container ${CONTAINER_NAME}..."
                 bat "docker start ${CONTAINER_NAME}"
-                sleep time: 10, unit: 'SECONDS'
+                sleep time: 50, unit: 'SECONDS'
             }
         }
 
@@ -38,9 +38,18 @@ pipeline {
                     bat 'npx playwright test'
                 }
             }
+            post {
+                failure {
+                    echo "❌ Tests failed. Stopping container ${CONTAINER_NAME}..."
+                    bat "docker stop ${CONTAINER_NAME}"
+                }
+            }
         }
 
         stage('Stop Test Container') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
             steps {
                 echo "Stopping container ${CONTAINER_NAME}..."
                 bat "docker stop ${CONTAINER_NAME}"
