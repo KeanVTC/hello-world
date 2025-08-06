@@ -2,74 +2,63 @@ pipeline {
     agent any
 
     environment {
-        TEST_PORT = "8086"
-        PROD_PORT = "9090"
+        IMAGE_NAME = 'springboot-ci-demo'
+        STAGING_CONTAINER = 'staging-container'
+        PROD_CONTAINER = 'prod-container'
+        STAGING_PORT = '8086'
+        PROD_PORT = '9090'
     }
 
     stages {
-        stage('Clone') {
+        stage('Checkout') {
             steps {
-                git 'https://github.com/your-org/your-repo.git'
+                checkout scm
             }
         }
 
         stage('Build') {
             steps {
-                dir('spring-hello') {
-                    sh 'mvn clean package -DskipTests'
-                }
+                sh 'mvn clean package -DskipTests'
             }
         }
 
-        stage('Run Test Container') {
+        stage('Unit Test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Deploy to Staging') {
             steps {
                 sh '''
-                docker rm -f test-hello || true
-                docker build -t hello-world-test -f spring-hello/Dockerfile spring-hello
-                docker run -d --name test-hello -p ${TEST_PORT}:8086 hello-world-test
-                sleep 10
+                    docker stop $STAGING_CONTAINER || true
+                    docker rm $STAGING_CONTAINER || true
+                    docker build -t $IMAGE_NAME .
+                    docker run -d -p $STAGING_PORT:8080 --name $STAGING_CONTAINER $IMAGE_NAME
                 '''
             }
         }
 
-        stage('Install Playwright & Test') {
+        stage('Run Playwright Tests') {
             steps {
                 dir('spring-hello/playwright-tests') {
                     sh '''
-                    npm install -D @playwright/test
-                    npx playwright install
-                    npx playwright test
+                        npm ci
+                        npx playwright install --with-deps
+                        npm test
                     '''
                 }
             }
         }
 
-        stage('Stop Test Container') {
-            steps {
-                sh 'docker stop test-hello'
-            }
-        }
-
         stage('Deploy to Production') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
             steps {
                 sh '''
-                docker rm -f prod-hello || true
-                docker build -t hello-world-prod -f spring-hello/Dockerfile spring-hello
-                docker run -d --name prod-hello -p ${PROD_PORT}:8086 hello-world-prod
+                    docker stop $PROD_CONTAINER || true
+                    docker rm $PROD_CONTAINER || true
+                    docker run -d -p $PROD_PORT:8080 --name $PROD_CONTAINER $IMAGE_NAME
                 '''
             }
-        }
-    }
-
-    post {
-        always {
-            echo "Build finished"
-        }
-        failure {
-            echo "Test failed — not deploying to production"
         }
     }
 }
