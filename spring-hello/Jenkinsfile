@@ -2,11 +2,7 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'springboot-ci-demo'
-        CONTAINER_NAME = 'springboot-ci-container'
-        APP_PORT = '8086'
-        PROD_IMAGE_NAME = 'springboot-prod-image'
-        PROD_CONTAINER_NAME = 'springboot-prod-container'
+        E2E_PORT = '8086'
         PROD_PORT = '9090'
     }
 
@@ -19,40 +15,40 @@ pipeline {
 
         stage('Build') {
             steps {
-                bat 'mvn clean package -DskipTests'
+                dir('spring-hello') {
+                    bat 'mvn clean package -DskipTests'
+                }
             }
         }
 
         stage('Unit Test') {
             steps {
-                bat 'mvn test'
+                dir('spring-hello') {
+                    bat 'mvn test'
+                }
             }
         }
 
         stage('Run App for E2E Test') {
             steps {
-                bat """
-                    docker stop %CONTAINER_NAME% || exit 0
-                    docker rm %CONTAINER_NAME% || exit 0
-                    docker build -t %IMAGE_NAME% .
-                    docker run -d -p %APP_PORT%:8080 --name %CONTAINER_NAME% %IMAGE_NAME%
-                """
-                sleep time: 15, unit: 'SECONDS' // Give the app time to start
+                dir('spring-hello') {
+                    bat "start /b java -jar target/*.jar --server.port=%E2E_PORT%"
+                    bat 'timeout /t 10'
+                }
             }
         }
 
         stage('Install Playwright Dependencies') {
             steps {
-                dir('spring-hello/playwright-tests') {
-                    bat 'npm ci'
-                    bat 'npx playwright install'
+                dir('spring-hello') {
+                    bat 'npm install'
                 }
             }
         }
 
         stage('E2E Test') {
             steps {
-                dir('spring-hello/playwright-tests') {
+                dir('spring-hello') {
                     bat 'npx playwright test'
                 }
             }
@@ -60,19 +56,15 @@ pipeline {
 
         stage('Stop Test App') {
             steps {
-                bat 'docker stop %CONTAINER_NAME% || exit 0'
-                bat 'docker rm %CONTAINER_NAME% || exit 0'
+                bat 'FOR /F "tokens=5" %%A IN (\'netstat -aon ^| findstr :%E2E_PORT%\') DO taskkill /PID %%A /F'
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                bat """
-                    docker stop %PROD_CONTAINER_NAME% || exit 0
-                    docker rm %PROD_CONTAINER_NAME% || exit 0
-                    docker build -t %PROD_IMAGE_NAME% .
-                    docker run -d -p %PROD_PORT%:8080 --name %PROD_CONTAINER_NAME% %PROD_IMAGE_NAME%
-                """
+                dir('spring-hello') {
+                    bat "start /b java -jar target/*.jar --server.port=%PROD_PORT%"
+                }
             }
         }
     }
