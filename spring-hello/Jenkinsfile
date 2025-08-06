@@ -2,12 +2,11 @@ pipeline {
     agent any
 
     environment {
-        CONTAINER_NAME = 'spring-hello-container'
-        PROD_CONTAINER_NAME = 'spring-prod-container'
-        TEST_PORT = '8086'
+        TEST_CONTAINER = 'spring-hello-container'
+        PROD_CONTAINER = 'spring-prod-container'
+        INTERNAL_PORT = '8086'
+        TEST_PORT = '9090'
         PROD_PORT = '9091'
-        JAR_NAME = 'springboot-ci-demo-0.0.1-SNAPSHOT.jar'
-        IMAGE_NAME = 'springboot-ci-demo'
     }
 
     stages {
@@ -19,10 +18,10 @@ pipeline {
             }
         }
 
-        stage('Start Existing Container') {
+        stage('Start Test Container') {
             steps {
-                echo "Starting existing container ${CONTAINER_NAME}..."
-                bat "docker start ${CONTAINER_NAME}"
+                echo "Starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
+                bat "docker start ${TEST_CONTAINER}"
                 sleep time: 50, unit: 'SECONDS'
             }
         }
@@ -46,35 +45,37 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                echo "Stopping container ${CONTAINER_NAME}..."
-                bat "docker stop ${CONTAINER_NAME}"
+                echo "Stopping test container ${TEST_CONTAINER}..."
+                bat "docker stop ${TEST_CONTAINER}"
             }
         }
 
-        stage('Deploy to Production Container') {
+        stage('Deploy to Production') {
             steps {
-                echo "Deploying production container on port ${PROD_PORT}..."
-                dir('spring-hello') {
-                    bat """
-                        docker build -t ${IMAGE_NAME}:prod .
-                        docker rm -f ${PROD_CONTAINER_NAME} || exit 0
-                        docker run -d --name ${PROD_CONTAINER_NAME} -p ${PROD_PORT}:8080 ${IMAGE_NAME}:prod
-                    """
+                echo "Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
+                script {
+                    def containerExists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
+                    if (containerExists) {
+                        bat "docker stop ${PROD_CONTAINER}"
+                        bat "docker rm ${PROD_CONTAINER}"
+                    }
                 }
+                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
             }
         }
     }
 
     post {
         success {
-            echo "✅ Pipeline passed: Tests succeeded and production deployed on port ${PROD_PORT}."
+            echo "✅ Pipeline passed: Tests succeeded and app deployed to port ${PROD_PORT}."
         }
         failure {
-            echo "❌ Pipeline failed: One or more stages failed."
-            bat "docker stop ${CONTAINER_NAME} || exit 0"
+            echo "❌ Pipeline failed: Tests failed or deployment error."
+            echo "⛔ Cleaning up test container..."
+            bat "docker stop ${TEST_CONTAINER}" // Safe even if already stopped
         }
         always {
-            echo '📦 CI/CD pipeline completed.'
+            echo '📦 CI/CD Pipeline completed.'
         }
     }
 }
