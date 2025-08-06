@@ -30,13 +30,13 @@ pipeline {
         }
 
         stage('Run App for E2E Test') {
-            steps {
-                dir('spring-hello') {
-                    bat "start /b java -jar target/*.jar --server.port=%E2E_PORT%"
-                    bat 'timeout /t 10'
-                }
-            }
-        }
+    dir('spring-hello') {
+        bat 'start /b java -jar target/*.jar --server.port=8086'
+        // Sleep to allow app to start
+        bat 'ping -n 10 127.0.0.1 > nul'
+    }
+}
+
 
         stage('Install Playwright Dependencies') {
             steps {
