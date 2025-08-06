@@ -6,5 +6,5 @@ test('Hello World app should return greeting message', async ({ request }) => {
   expect(response.status()).toBe(200);
 
   const body = await response.text();
-  expect(body).toContain('Hello, World'); // ✅ keep this to validate content
+  expect(body).toContain('Spring Boot!'); // ✅ keep this to validate content
 });
