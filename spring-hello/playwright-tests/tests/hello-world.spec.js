@@ -1,9 +1,10 @@
-import { test, expect } from '@playwright/test';
+// spring-hello/playwright-tests/tests/hello-world.spec.js
+const { test, expect } = require('@playwright/test');
 
 test('Hello World app should return greeting message', async ({ request }) => {
-  const response = await request.get('/');
+  const response = await request.get('/hello'); // ✅ updated path
   expect(response.status()).toBe(200);
 
   const body = await response.text();
-  expect(body).toContain('Hello, World'); // Adjust based on actual response
+  expect(body).toContain('Hello, World'); // ✅ keep this to validate content
 });
