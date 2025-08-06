@@ -1,3 +1,3 @@
 path,expected
+/,Hello, World!
 /hello,Spring Boot!
-/goodbye,Goodbye from Spring
