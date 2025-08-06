@@ -30,13 +30,14 @@ pipeline {
         }
 
         stage('Run App for E2E Test') {
-    dir('spring-hello') {
-        bat 'start /b java -jar target/*.jar --server.port=8086'
-        // Sleep to allow app to start
-        bat 'ping -n 10 127.0.0.1 > nul'
-    }
-}
-
+            steps {
+                dir('spring-hello') {
+                    bat 'start /b java -jar target/*.jar --server.port=8086'
+                    // Wait for app to start
+                    bat 'ping -n 10 127.0.0.1 > nul'
+                }
+            }
+        }
 
         stage('Install Playwright Dependencies') {
             steps {
@@ -56,6 +57,7 @@ pipeline {
 
         stage('Stop Test App') {
             steps {
+                // Kill the Java process on the E2E port
                 bat 'FOR /F "tokens=5" %%A IN (\'netstat -aon ^| findstr :%E2E_PORT%\') DO taskkill /PID %%A /F'
             }
         }
@@ -63,7 +65,7 @@ pipeline {
         stage('Deploy to Production') {
             steps {
                 dir('spring-hello') {
-                    bat "start /b java -jar target/*.jar --server.port=%PROD_PORT%"
+                    bat 'start /b java -jar target/*.jar --server.port=%PROD_PORT%'
                 }
             }
         }
