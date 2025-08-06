@@ -1,13 +1,10 @@
-// playwright-tests/playwright.config.js
-module.exports = {
-  testDir: './tests',
-  timeout: 10000,
-  retries: 1,
+// playwright.config.js
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
   use: {
-    headless: true,
-    baseURL: 'http://localhost:8086',
-    screenshot: 'only-on-failure',
-    video: 'on-first-retry',
+    baseURL: 'http://localhost:8086', // staging container
   },
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report' }]],
-};
+  retries: 1,
+  reporter: 'list',
+});
