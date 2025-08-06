@@ -1,4 +1,4 @@
-/target
-*.iml
+target/
 .idea/
-*.log
+*.iml
+node_modules/
