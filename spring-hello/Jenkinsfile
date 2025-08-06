@@ -2,41 +2,57 @@ pipeline {
     agent any
 
     environment {
-        TEST_CONTAINER_NAME = "spring-hello-container"
-        TEST_PORT_MAPPING = "9090:8086"
-        IMAGE_NAME = "spring-hello"
+        APP_NAME = "spring-hello"
+        IMAGE_NAME = "spring-hello-image"
+        CONTAINER_NAME = "spring-hello-container"
+        TEST_PORT = "8086"
+        PROD_PORT = "9090"
+        TEST_URL = "http://localhost:${TEST_PORT}/hello"
+        REPORT_DIR = "spring-hello/playwright-tests/playwright-report"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout App Code') {
             steps {
-                git 'https://github.com/KeanVTC/springboot-ci-demo.git'
+                dir('spring-hello') {
+                    git url: 'https://github.com/KeanVTC/springboot-ci-demo.git', branch: 'master'
+                }
             }
         }
 
         stage('Build App') {
             steps {
                 dir('spring-hello') {
-                    bat 'mvn clean package -DskipTests'
+                    bat "mvn clean package -DskipTests"
                 }
             }
         }
 
         stage('Start Test Container') {
             steps {
-                bat """
-                docker rm -f %TEST_CONTAINER_NAME% || echo Container not present
-                docker run -d --name %TEST_CONTAINER_NAME% -p %TEST_PORT_MAPPING% %IMAGE_NAME%
-                """
-                sleep time: 20, unit: 'SECONDS'
+                dir('spring-hello') {
+                    bat """
+                        docker rm -f ${CONTAINER_NAME} || echo Already removed
+                        docker build -t ${IMAGE_NAME} .
+                        docker run -d -p ${TEST_PORT}:8080 --name ${CONTAINER_NAME} ${IMAGE_NAME}
+                        timeout 30 curl --retry 5 --retry-delay 5 --retry-connrefused ${TEST_URL}
+                    """
+                }
+            }
+        }
+
+        stage('Checkout Playwright Tests') {
+            steps {
+                dir('spring-hello/playwright-tests') {
+                    git url: 'https://github.com/KeanVTC/hello-world.git', branch: 'main'
+                }
             }
         }
 
         stage('Install Playwright') {
             steps {
-                dir('spring-hello/playwright') {
-                    bat 'npm install'
-                    bat 'npx playwright install'
+                dir('spring-hello/playwright-tests') {
+                    bat "npm install"
                 }
             }
         }
@@ -44,25 +60,38 @@ pipeline {
         stage('Run E2E Test') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    bat 'npx playwright test --reporter=html'
-                    // Optional (if running locally and want to auto open): bat 'npx playwright show-report'
+                    bat "npx playwright test --reporter=html"
                 }
+            }
+        }
+
+        stage('Archive Test Report') {
+            steps {
+                publishHTML(target: [
+                    reportDir: "${REPORT_DIR}",
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright Report',
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true,
+                    allowMissing: true
+                ])
             }
         }
 
         stage('Stop Test Container') {
             steps {
-                bat "docker stop %TEST_CONTAINER_NAME% || echo Already stopped"
+                bat "docker rm -f ${CONTAINER_NAME} || echo Already removed"
             }
         }
 
         stage('Deploy to Production') {
-            when {
-                expression { currentBuild.currentResult == 'SUCCESS' }
-            }
             steps {
-                echo "✅ Ready to deploy!"
-                // Add real deployment steps here
+                dir('spring-hello') {
+                    bat """
+                        docker rm -f ${CONTAINER_NAME}-prod || echo Already removed
+                        docker run -d -p ${PROD_PORT}:8080 --name ${CONTAINER_NAME}-prod ${IMAGE_NAME}
+                    """
+                }
             }
         }
     }
@@ -70,30 +99,9 @@ pipeline {
     post {
         always {
             echo '📦 CI/CD Pipeline completed.'
-
-            // Clean up test container
             echo '⛔ Cleaning up test container...'
-            bat "docker rm -f %TEST_CONTAINER_NAME% || echo Already removed"
-
-            // Archive Playwright test report
-            echo '📁 Archiving Playwright HTML report...'
-            archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
-
-            // Publish the report to Jenkins UI
-            publishHTML(target: [
-                allowMissing: true,
-                alwaysLinkToLastBuild: true,
-                keepAll: true,
-                reportDir: 'spring-hello/playwright-tests/playwright-report',
-                reportFiles: 'index.html',
-                reportName: 'Playwright Test Report'
-            ])
+            bat "docker rm -f ${CONTAINER_NAME} || echo Already removed"
         }
-
-        success {
-            echo '✅ Pipeline succeeded.'
-        }
-
         failure {
             echo '❌ Pipeline failed: Tests failed or deployment error.'
         }
