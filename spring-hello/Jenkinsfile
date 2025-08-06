@@ -45,13 +45,14 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     bat 'npx playwright test --reporter=html'
+                    // Optional (if running locally and want to auto open): bat 'npx playwright show-report'
                 }
             }
         }
 
         stage('Stop Test Container') {
             steps {
-                bat "docker stop %TEST_CONTAINER_NAME%"
+                bat "docker stop %TEST_CONTAINER_NAME% || echo Already stopped"
             }
         }
 
@@ -61,7 +62,7 @@ pipeline {
             }
             steps {
                 echo "✅ Ready to deploy!"
-                // Add your real deployment steps here
+                // Add real deployment steps here
             }
         }
     }
@@ -69,25 +70,16 @@ pipeline {
     post {
         always {
             echo '📦 CI/CD Pipeline completed.'
-            echo '📁 Archiving Playwright HTML report...'
-            archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
-        }
 
-        success {
-            echo '✅ Pipeline succeeded.'
-        }
-
-        failure {
-            echo '❌ Pipeline failed: Tests failed or deployment error.'
-        }
-
-        cleanup {
+            // Clean up test container
             echo '⛔ Cleaning up test container...'
             bat "docker rm -f %TEST_CONTAINER_NAME% || echo Already removed"
-        }
 
-        // Publish HTML test report
-        always {
+            // Archive Playwright test report
+            echo '📁 Archiving Playwright HTML report...'
+            archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
+
+            // Publish the report to Jenkins UI
             publishHTML(target: [
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
@@ -96,6 +88,14 @@ pipeline {
                 reportFiles: 'index.html',
                 reportName: 'Playwright Test Report'
             ])
+        }
+
+        success {
+            echo '✅ Pipeline succeeded.'
+        }
+
+        failure {
+            echo '❌ Pipeline failed: Tests failed or deployment error.'
         }
     }
 }
