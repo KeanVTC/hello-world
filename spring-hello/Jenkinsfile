@@ -2,44 +2,43 @@ pipeline {
     agent any
 
     environment {
-        E2E_PORT = '8086'
-        PROD_PORT = '9090'
+        TEST_PORT = "8086"
+        PROD_PORT = "9090"
+        IMAGE_NAME = "hello-world-demo"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git 'https://github.com/KeanVTC/hello-world.git'
             }
         }
 
-        stage('Build') {
+        stage('Build JAR') {
             steps {
                 dir('spring-hello') {
-                    bat 'mvn clean package -DskipTests'
+                    bat 'mvn clean package'
                 }
             }
         }
 
-        stage('Unit Test') {
+        stage('Build Docker Image') {
             steps {
                 dir('spring-hello') {
-                    bat 'mvn test'
+                    bat "docker build -t %IMAGE_NAME% ."
                 }
             }
         }
 
-        stage('Run App for E2E Test') {
+        stage('Run Test Container') {
             steps {
-                dir('spring-hello') {
-                    bat 'start /b java -jar target/*.jar --server.port=8086'
-                    // Wait for app to start
-                    bat 'ping -n 10 127.0.0.1 > nul'
-                }
+                bat "docker run -d -p %TEST_PORT%:8080 --name test-container %IMAGE_NAME%"
+                // Optional: wait a few seconds to let Spring Boot start
+                bat "ping -n 10 127.0.0.1 >nul"
             }
         }
 
-        stage('Install Playwright Dependencies') {
+        stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
                     bat 'npm install'
@@ -47,7 +46,7 @@ pipeline {
             }
         }
 
-        stage('E2E Test') {
+        stage('Run E2E Test') {
             steps {
                 dir('spring-hello') {
                     bat 'npx playwright test'
@@ -55,19 +54,24 @@ pipeline {
             }
         }
 
-        stage('Stop Test App') {
+        stage('Stop Test Container') {
             steps {
-                // Kill the Java process on the E2E port
-                bat 'FOR /F "tokens=5" %%A IN (\'netstat -aon ^| findstr :%E2E_PORT%\') DO taskkill /PID %%A /F'
+                bat 'docker stop test-container'
+                bat 'docker rm test-container'
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                dir('spring-hello') {
-                    bat 'start /b java -jar target/*.jar --server.port=%PROD_PORT%'
-                }
+                bat "docker run -d -p %PROD_PORT%:8080 --name prod-container %IMAGE_NAME%"
             }
+        }
+    }
+
+    post {
+        always {
+            echo 'Cleaning up containers...'
+            bat 'docker rm -f test-container || exit 0'
         }
     }
 }
