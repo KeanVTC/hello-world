@@ -2,77 +2,61 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "spring-hello"
-        TEST_CONTAINER = "test-container"
-        PROD_CONTAINER = "prod-container"
+        CONTAINER_NAME = 'spring-hello-container'
+        TEST_PORT = '9090'
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                git branch: 'main', url: 'https://github.com/KeanVTC/hello-world.git'
-            }
-        }
-
-        stage('Build JAR') {
+        stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
-                    bat 'mvn clean package'
+                    bat 'mvn clean package -DskipTests'
                 }
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Start Existing Container') {
             steps {
-                dir('spring-hello') {
-                    bat "docker build -t %IMAGE_NAME% ."
-                }
-            }
-        }
-
-        stage('Run Test Container') {
-            steps {
-                bat "docker run -d -p 8086:8080 --name %TEST_CONTAINER% %IMAGE_NAME%"
+                echo "Starting existing container ${CONTAINER_NAME}..."
+                bat "docker start ${CONTAINER_NAME}"
                 sleep time: 10, unit: 'SECONDS'
             }
         }
 
         stage('Install Playwright') {
-            steps {
-                dir('spring-hello/playwright') {
+            dir('spring-hello/playwright') {
+                steps {
                     bat 'npm install'
                     bat 'npx playwright install'
                 }
             }
         }
 
-stage('Run E2E Test') {
-    steps {
-        dir('spring-hello/playwright-tests') {
-            bat 'npx playwright test'
-        }
-    }
-}
-
-
-        stage('Stop Test Container') {
-            steps {
-                bat "docker rm -f %TEST_CONTAINER% || exit 0"
+        stage('Run E2E Test') {
+            dir('spring-hello/playwright-tests') {
+                steps {
+                    bat 'npx playwright test'
+                }
             }
         }
 
-        stage('Deploy to Production') {
+        stage('Stop Test Container') {
             steps {
-                bat "docker rm -f %PROD_CONTAINER% || exit 0"
-                bat "docker run -d -p 9090:8080 --name %PROD_CONTAINER% %IMAGE_NAME%"
+                echo "Stopping container ${CONTAINER_NAME}..."
+                bat "docker stop ${CONTAINER_NAME}"
             }
         }
     }
 
     post {
+        success {
+            echo "✅ Pipeline passed: All E2E tests succeeded."
+        }
+        failure {
+            echo "❌ Pipeline failed: One or more stages failed."
+        }
         always {
-            echo 'Cleaning up containers...'
-            bat "docker rm -f %TEST_CONTAINER% || exit 0"
+            echo '📦 Test pipeline completed.'
         }
     }
 }

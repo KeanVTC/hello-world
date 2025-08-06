@@ -1,6 +1,6 @@
 // playwright.config.js
 module.exports = {
   use: {
-    baseURL: 'http://localhost:8086',
+    baseURL: 'http://localhost:9090',
   },
 };
