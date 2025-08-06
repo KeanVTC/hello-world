@@ -22,7 +22,7 @@ pipeline {
             steps {
                 echo "Starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
                 bat "docker start ${TEST_CONTAINER}"
-                sleep time: 50, unit: 'SECONDS'
+                sleep time: 20, unit: 'SECONDS'
             }
         }
 
