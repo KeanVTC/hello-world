@@ -1,43 +1,75 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'Maven' // adjust to your Jenkins Maven tool name
+    environment {
+        TEST_PORT = "8086"
+        PROD_PORT = "9090"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Clone') {
             steps {
-                git branch: 'main', url: 'https://github.com/KeanVTC/hello-world.git'
+                git 'https://github.com/your-org/your-repo.git'
             }
         }
 
-        stage('Build with Maven') {
+        stage('Build') {
             steps {
                 dir('spring-hello') {
-                    bat 'mvn clean install'
+                    sh 'mvn clean package -DskipTests'
                 }
             }
         }
 
-        stage('Deploy to Docker Tomcat') {
-    steps {
-        dir('spring-hello') {
-            bat '''
-                docker build -t spring-hello .
-                docker stop spring-hello-container || echo not running
-                docker rm spring-hello-container || echo already removed
-                docker run -d --name spring-hello-container -p 9090:8086 spring-hello
-            '''
+        stage('Run Test Container') {
+            steps {
+                sh '''
+                docker rm -f test-hello || true
+                docker build -t hello-world-test -f spring-hello/Dockerfile spring-hello
+                docker run -d --name test-hello -p ${TEST_PORT}:8086 hello-world-test
+                sleep 10
+                '''
+            }
         }
-    }
-}
 
+        stage('Install Playwright & Test') {
+            steps {
+                dir('spring-hello/playwright-tests') {
+                    sh '''
+                    npm install -D @playwright/test
+                    npx playwright install
+                    npx playwright test
+                    '''
+                }
+            }
+        }
+
+        stage('Stop Test Container') {
+            steps {
+                sh 'docker stop test-hello'
+            }
+        }
+
+        stage('Deploy to Production') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
+            steps {
+                sh '''
+                docker rm -f prod-hello || true
+                docker build -t hello-world-prod -f spring-hello/Dockerfile spring-hello
+                docker run -d --name prod-hello -p ${PROD_PORT}:8086 hello-world-prod
+                '''
+            }
+        }
     }
 
     post {
+        always {
+            echo "Build finished"
+        }
         failure {
-            echo '❌ Build or deploy failed.'
+            echo "Test failed — not deploying to production"
         }
     }
 }
