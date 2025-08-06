@@ -46,13 +46,14 @@ pipeline {
             }
         }
 
-        stage('Run E2E Test') {
-            steps {
-                dir('spring-hello/playwright') {
-                    bat 'npx playwright test'
-                }
-            }
+stage('Run E2E Test') {
+    steps {
+        dir('spring-hello/playwright-tests') {
+            bat 'npx playwright test'
         }
+    }
+}
+
 
         stage('Stop Test Container') {
             steps {
