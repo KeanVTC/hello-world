@@ -24,8 +24,8 @@ pipeline {
         }
 
         stage('Install Playwright') {
-            dir('spring-hello/playwright') {
-                steps {
+            steps {
+                dir('spring-hello/playwright') {
                     bat 'npm install'
                     bat 'npx playwright install'
                 }
@@ -33,8 +33,8 @@ pipeline {
         }
 
         stage('Run E2E Test') {
-            dir('spring-hello/playwright-tests') {
-                steps {
+            steps {
+                dir('spring-hello/playwright-tests') {
                     bat 'npx playwright test'
                 }
             }
