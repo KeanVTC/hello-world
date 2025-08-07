@@ -1,9 +1,5 @@
-import { defineConfig } from '@playwright/test';
-
-export default defineConfig({
-  testDir: './tests',
-  reporter: [['html', { outputFolder: 'playwright-report', open: 'never' }]],
+module.exports = {
   use: {
-    baseURL: 'http://localhost:9090',
-  },
-});
+    baseURL: 'http://localhost:9090', // or whatever port is used for testing
+  }
+};

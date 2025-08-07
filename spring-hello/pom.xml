@@ -1,7 +1,6 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
@@ -11,28 +10,27 @@
     <packaging>jar</packaging>
 
     <name>springboot-ci-demo</name>
-    <description>Spring Boot CI/CD Hello World app</description>
-
-    <properties>
-        <java.version>17</java.version>
-        <spring-boot.version>3.2.4</spring-boot.version>
-    </properties>
+    <description>Demo project for Spring Boot CI/CD</description>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>${spring-boot.version}</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <version>3.2.4</version>
+        <relativePath/> <!-- important if not in same directory -->
     </parent>
 
+    <properties>
+        <java.version>17</java.version>
+    </properties>
+
     <dependencies>
-        <!-- Basic Web Dependency -->
+        <!-- Spring Boot Web Starter -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Test -->
+        <!-- Spring Boot Test Starter -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -42,21 +40,20 @@
 
     <build>
         <plugins>
-            <!-- Build executable JAR -->
+            <!-- Spring Boot Plugin to repackage JAR -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>${spring-boot.version}</version>
-                <configuration>
-                    <excludes>
-                        <!-- Exclude Docker build to avoid Jenkins Docker socket issues -->
-                        <exclude>
-                            <groupId>org.springframework.boot</groupId>
-                            <artifactId>spring-boot-docker</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
+
 </project>
