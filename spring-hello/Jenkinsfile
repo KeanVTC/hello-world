@@ -28,7 +28,7 @@ pipeline {
 
         stage('Install Playwright') {
             steps {
-                dir('spring-hello/playwright') {
+                dir('spring-hello') {
                     bat 'npm install'
                     bat 'npx playwright install'
                 }
@@ -37,8 +37,8 @@ pipeline {
 
         stage('Run E2E Test') {
             steps {
-                dir('spring-hello/playwright-tests') {
-                    bat 'npx playwright test --reporter=html'
+                dir('spring-hello') {
+                    bat 'npm test'
                 }
             }
         }
@@ -68,13 +68,12 @@ pipeline {
     post {
         always {
             echo '📦 CI/CD Pipeline completed.'
-            echo '📁 Archiving Playwright report...'
-            archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'spring-hello/playwright-report/**', allowEmptyArchive: true
             publishHTML(target: [
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
                 keepAll: true,
-                reportDir: 'spring-hello/playwright-tests/playwright-report',
+                reportDir: 'spring-hello/playwright-report',
                 reportFiles: 'index.html',
                 reportName: 'Playwright Test Report'
             ])
@@ -86,7 +85,7 @@ pipeline {
 
         failure {
             echo "❌ Pipeline failed: Tests failed or deployment error."
-            bat "docker stop ${TEST_CONTAINER}" // Just in case
+            bat "docker stop ${TEST_CONTAINER}"
         }
     }
 }

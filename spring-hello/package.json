@@ -1,9 +1,8 @@
 {
-  "name": "spring-hello-playwright",
+  "name": "spring-hello",
   "version": "1.0.0",
-  "description": "Playwright E2E tests",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test --reporter=html"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.2"
