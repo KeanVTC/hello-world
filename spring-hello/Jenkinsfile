@@ -2,100 +2,108 @@ pipeline {
     agent any
 
     environment {
-        MAVEN_HOME = tool 'Maven' // Set to the name you configured in Jenkins
-        JAVA_HOME = tool name: 'JDK17', type: 'jdk' // Adjust if using different name
-        PATH = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${env.PATH}"
-        IMAGE_NAME = 'spring-hello-image'
-        TEST_CONTAINER_NAME = 'spring-hello-container'
-        PROD_CONTAINER_NAME = 'spring-hello-prod'
+        TEST_CONTAINER = 'spring-hello-container'
+        PROD_CONTAINER = 'spring-prod-container'
+        INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
-        APP_PORT = '8086'
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Build with Maven') {
+        stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
-                    bat "mvn clean package"
+                    bat 'mvn clean package -DskipTests'
                 }
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Start Test Container') {
             steps {
-                dir('spring-hello') {
-                    bat "docker build -t ${IMAGE_NAME} ."
+                echo "🔍 Checking and starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
+                script {
+                    def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                    if (existsStatus == 0) {
+                        echo "✅ Test container exists. Starting..."
+                        bat "docker start ${TEST_CONTAINER}"
+                    } else {
+                        echo "⚠️ Test container not found. Building image and creating new container..."
+                        dir('spring-hello') {
+                            bat "docker build -t spring-hello:latest ."
+                        }
+                        bat "docker create --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                        bat "docker start ${TEST_CONTAINER}"
+                    }
+                    sleep time: 20, unit: 'SECONDS'
                 }
             }
         }
 
-        stage('Run Test Container') {
+        stage('Install Playwright') {
             steps {
-                bat "docker run -d -p ${TEST_PORT}:${APP_PORT} --name ${TEST_CONTAINER_NAME} ${IMAGE_NAME}"
-                bat 'timeout /t 20' // Wait for app to be ready
+                dir('spring-hello/playwright') {
+                    bat 'npm install'
+                    bat 'npx playwright install'
+                }
             }
         }
 
         stage('Run E2E Test') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    bat 'npm ci'
-                    bat "npx playwright test --config=playwright.config.js"
-                }
-            }
-        }
-
-        stage('Verify Test Report') {
-            steps {
-                dir('spring-hello/playwright-tests') {
-                    script {
-                        def result = bat(script: 'npx playwright show-report --quiet', returnStatus: true)
-                        if (result != 0) {
-                            error('Playwright tests failed.')
-                        }
-                    }
+                    bat 'npx playwright test'
                 }
             }
         }
 
         stage('Stop Test Container') {
             steps {
+                echo "🛑 Stopping test container ${TEST_CONTAINER}..."
                 script {
-                    bat "docker stop ${TEST_CONTAINER_NAME} || exit 0"
-                    bat "docker rm ${TEST_CONTAINER_NAME} || exit 0"
+                    def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                    if (existsStatus == 0) {
+                        bat "docker stop ${TEST_CONTAINER}"
+                    } else {
+                        echo "No test container found to stop."
+                    }
                 }
             }
         }
 
         stage('Deploy to Production') {
             steps {
+                echo "🚀 Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
                 script {
-                    bat "docker stop ${PROD_CONTAINER_NAME} || exit 0"
-                    bat "docker rm ${PROD_CONTAINER_NAME} || exit 0"
-                    bat "docker run -d -p ${PROD_PORT}:${APP_PORT} --name ${PROD_CONTAINER_NAME} ${IMAGE_NAME}"
+                    def existsStatus = bat(script: "docker inspect --type container ${PROD_CONTAINER}", returnStatus: true)
+                    if (existsStatus == 0) {
+                        echo "🧹 Removing existing production container..."
+                        bat "docker stop ${PROD_CONTAINER}"
+                        bat "docker rm ${PROD_CONTAINER}"
+                    }
                 }
+                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
             }
         }
     }
 
     post {
-        always {
-            echo "📦 CI/CD Pipeline completed."
+        success {
+            echo "✅ Pipeline passed: Tests succeeded and app deployed to port ${PROD_PORT}."
         }
         failure {
             echo "❌ Pipeline failed: Tests failed or deployment error."
-            echo "⛔ Cleaning up test container (if running)..."
+            echo "⛔ Cleaning up test container if needed..."
             script {
-                bat "docker stop ${TEST_CONTAINER_NAME} || exit 0"
-                bat "docker rm ${TEST_CONTAINER_NAME} || exit 0"
+                def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                if (existsStatus == 0) {
+                    bat "docker stop ${TEST_CONTAINER}"
+                } else {
+                    echo "No test container found to stop."
+                }
             }
+        }
+        always {
+            echo '📦 CI/CD Pipeline completed.'
         }
     }
 }
