@@ -1,89 +1,101 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    IMAGE_NAME = "spring-hello"
-    CONTAINER_NAME = "spring-hello-container"
-    HOST_PORT = "9090"
-    CONTAINER_PORT = "8086"
-    BASE_URL = "http://localhost:${HOST_PORT}"
-  }
-
-  stages {
-    stage('Checkout') {
-      steps {
-        git 'https://github.com/KeanVTC/springboot-ci-demo'
-      }
+    environment {
+        MAVEN_HOME = tool 'Maven' // Set to the name you configured in Jenkins
+        JAVA_HOME = tool name: 'JDK17', type: 'jdk' // Adjust if using different name
+        PATH = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${env.PATH}"
+        IMAGE_NAME = 'spring-hello-image'
+        TEST_CONTAINER_NAME = 'spring-hello-container'
+        PROD_CONTAINER_NAME = 'spring-hello-prod'
+        TEST_PORT = '9090'
+        PROD_PORT = '9091'
+        APP_PORT = '8086'
     }
 
-    stage('Build with Maven') {
-      steps {
-        dir('spring-hello') {
-          bat 'mvn clean package'
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
         }
-      }
-    }
 
-    stage('Build Docker Image') {
-      steps {
-        dir('spring-hello') {
-          bat "docker build -t ${IMAGE_NAME} ."
+        stage('Build with Maven') {
+            steps {
+                dir('spring-hello') {
+                    bat "mvn clean package"
+                }
+            }
         }
-      }
-    }
 
-    stage('Run Test Container') {
-      steps {
-        bat "docker run -d --rm -p ${HOST_PORT}:${CONTAINER_PORT} --name ${CONTAINER_NAME} ${IMAGE_NAME}"
-        sleep time: 10, unit: 'SECONDS' // wait for app to start
-      }
-    }
-
-    stage('Run E2E Test') {
-      steps {
-        dir('spring-hello') {
-          withEnv(["BASE_URL=${BASE_URL}"]) {
-            bat 'npm install'
-            bat 'npm test'
-          }
+        stage('Build Docker Image') {
+            steps {
+                dir('spring-hello') {
+                    bat "docker build -t ${IMAGE_NAME} ."
+                }
+            }
         }
-      }
-    }
 
-    stage('Verify Test Report') {
-      steps {
-        script {
-          def reportFile = "spring-hello/playwright-report/index.html"
-          if (!fileExists(reportFile)) {
-            error "❌ Test report not found!"
-          }
-          echo "✅ Test report generated: ${reportFile}"
+        stage('Run Test Container') {
+            steps {
+                bat "docker run -d -p ${TEST_PORT}:${APP_PORT} --name ${TEST_CONTAINER_NAME} ${IMAGE_NAME}"
+                bat 'timeout /t 20' // Wait for app to be ready
+            }
         }
-      }
+
+        stage('Run E2E Test') {
+            steps {
+                dir('spring-hello/playwright-tests') {
+                    bat 'npm ci'
+                    bat "npx playwright test --config=playwright.config.js"
+                }
+            }
+        }
+
+        stage('Verify Test Report') {
+            steps {
+                dir('spring-hello/playwright-tests') {
+                    script {
+                        def result = bat(script: 'npx playwright show-report --quiet', returnStatus: true)
+                        if (result != 0) {
+                            error('Playwright tests failed.')
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Stop Test Container') {
+            steps {
+                script {
+                    bat "docker stop ${TEST_CONTAINER_NAME} || exit 0"
+                    bat "docker rm ${TEST_CONTAINER_NAME} || exit 0"
+                }
+            }
+        }
+
+        stage('Deploy to Production') {
+            steps {
+                script {
+                    bat "docker stop ${PROD_CONTAINER_NAME} || exit 0"
+                    bat "docker rm ${PROD_CONTAINER_NAME} || exit 0"
+                    bat "docker run -d -p ${PROD_PORT}:${APP_PORT} --name ${PROD_CONTAINER_NAME} ${IMAGE_NAME}"
+                }
+            }
+        }
     }
 
-    stage('Stop Test Container') {
-      steps {
-        bat "docker stop ${CONTAINER_NAME}"
-      }
+    post {
+        always {
+            echo "📦 CI/CD Pipeline completed."
+        }
+        failure {
+            echo "❌ Pipeline failed: Tests failed or deployment error."
+            echo "⛔ Cleaning up test container (if running)..."
+            script {
+                bat "docker stop ${TEST_CONTAINER_NAME} || exit 0"
+                bat "docker rm ${TEST_CONTAINER_NAME} || exit 0"
+            }
+        }
     }
-
-    stage('Deploy to Production') {
-      steps {
-        echo "🚀 Deploying to production container..."
-        // Add your actual production deployment logic here
-      }
-    }
-  }
-
-  post {
-    always {
-      echo '📦 CI/CD Pipeline completed.'
-      echo currentBuild.result == 'SUCCESS' ? '✅ Pipeline succeeded.' : '❌ Pipeline failed: Tests failed or deployment error.'
-      echo '⛔ Cleaning up test container (if running)...'
-      script {
-        bat "docker stop ${CONTAINER_NAME} || exit 0"
-      }
-    }
-  }
 }
