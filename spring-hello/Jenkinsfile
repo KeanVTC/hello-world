@@ -2,14 +2,22 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'spring-hello:latest'
+        DOCKER_IMAGE = 'spring-hello-image'
         CONTAINER_NAME = 'spring-hello-container'
-        TEST_PORT_MAPPING = '9090:8086'
+        HOST_PORT = '9090'
+        CONTAINER_PORT = '8086'
+        BASE_URL = "http://localhost:${HOST_PORT}"
         REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
     }
 
     stages {
-        stage('Build Maven App') {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/KeanVTC/springboot-ci-demo'
+            }
+        }
+
+        stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
                     bat 'mvn clean package -DskipTests'
@@ -20,59 +28,76 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 dir('spring-hello') {
-                    bat "docker build -t ${IMAGE_NAME} ."
+                    bat "docker build -t ${DOCKER_IMAGE} ."
                 }
             }
         }
 
-        stage('Run Test Container') {
+        stage('Start Test Container') {
             steps {
-                bat "docker run -d --name ${CONTAINER_NAME} -p ${TEST_PORT_MAPPING} ${IMAGE_NAME}"
-                sleep time: 20, unit: 'SECONDS'
+                bat "docker run -d -p ${HOST_PORT}:${CONTAINER_PORT} --name ${CONTAINER_NAME} ${DOCKER_IMAGE}"
+            }
+        }
+
+        stage('Wait for App Readiness') {
+            steps {
+                bat """
+                    for /l %%i in (1,1,10) do (
+                        curl -s ${BASE_URL}/ && exit /b 0
+                        timeout /t 3 >nul
+                    )
+                    exit /b 1
+                """
             }
         }
 
         stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
-                    bat 'npm install'
+                    bat 'npm ci'
                     bat 'npx playwright install'
                 }
             }
         }
 
-        stage('Run Playwright E2E Tests') {
+        stage('Run Playwright Tests') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    bat 'npx playwright test'
+                    bat "npx playwright test --project=chromium --reporter html"
                 }
             }
         }
 
         stage('Publish Playwright Report') {
+            when {
+                expression { fileExists("${REPORT_DIR}/index.html") }
+            }
             steps {
                 publishHTML(target: [
-                    reportDir: "${REPORT_DIR}",
-                    reportFiles: 'index.html',
-                    reportName: 'Playwright Test Report',
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
-                    keepAll: true
+                    keepAll: true,
+                    reportDir: "${REPORT_DIR}",
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright Test Report'
                 ])
             }
         }
 
         stage('Stop Test Container') {
             steps {
-                bat "docker stop ${CONTAINER_NAME}"
-                bat "docker rm ${CONTAINER_NAME}"
+                bat "docker stop ${CONTAINER_NAME} || exit 0"
+                bat "docker rm ${CONTAINER_NAME} || exit 0"
             }
         }
 
         stage('Deploy to Production') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
             steps {
-                echo '✅ Tests passed. Proceeding to production deployment...'
-                // Add your production deployment steps here
+                echo "✅ Deploying to production environment..."
+                // Your deployment logic here
             }
         }
     }
@@ -82,6 +107,9 @@ pipeline {
             echo '❌ Pipeline failed. Cleaning up test container...'
             bat "docker stop ${CONTAINER_NAME} || exit 0"
             bat "docker rm ${CONTAINER_NAME} || exit 0"
+        }
+        always {
+            echo 'Pipeline finished.'
         }
     }
 }
