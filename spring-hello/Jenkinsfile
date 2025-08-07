@@ -41,7 +41,7 @@ pipeline {
 
         stage('Install Playwright') {
             steps {
-                dir('spring-hello/playwright') {
+                dir('spring-hello') {
                     bat 'npm install'
                     bat 'npx playwright install'
                 }
@@ -56,17 +56,16 @@ pipeline {
             }
         }
 
-        stage('Publish Test Report') {
+        stage('Publish HTML Report') {
             steps {
-                echo "📊 Archiving and publishing Playwright report..."
-                // Enhancement #1: Archive HTML report
-                archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
-
-                // Enhancement #2: Show HTML report in Jenkins UI
                 publishHTML(target: [
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
                     reportDir: 'spring-hello/playwright-tests/playwright-report',
                     reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Test Report'
+                    reportName: 'Playwright E2E Test Report',
+                    reportTitles: 'Playwright Test Results'
                 ])
             }
         }
