@@ -1,5 +1,7 @@
-module.exports = {
+const { defineConfig } = require('@playwright/test');
+
+module.exports = defineConfig({
   use: {
-    baseURL: 'http://localhost:9090', // or whatever port is used for testing
-  }
-};
+    baseURL: process.env.BASE_URL || 'http://localhost:9090',
+  },
+});

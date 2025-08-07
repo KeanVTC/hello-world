@@ -18,7 +18,7 @@ function getExpectedResponse(route) {
 
 test('Validate /hello returns correct greeting', async ({ request }) => {
   const expected = getExpectedResponse('/hello');
-  const response = await request.get('/hello');
+  const response = await request.get('/hello'); // ✅ now uses baseURL
   expect(response.status()).toBe(200);
   const body = await response.text();
   expect(body).toContain(expected);
