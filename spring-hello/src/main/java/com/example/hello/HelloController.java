@@ -8,6 +8,9 @@ public class HelloController {
 
     @GetMapping("/hello")
     public String hello() {
-        return "<h1>Spring Boot!</h1>"; // <- CORRECT spacing
+        return "<h1>Spring Boot!</h1>";
     }
+
+    // You can add more endpoints
 }
+

@@ -2,24 +2,17 @@ const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
 
-// Utility function to get expected value from CSV
-function getExpectedResponse(route) {
-  const csvPath = path.resolve(__dirname, '../data/expected-values.csv');
-  const data = fs.readFileSync(csvPath, 'utf8');
-  const lines = data.split('\n');
-  for (const line of lines) {
-    const [pathFromCsv, expected] = line.trim().split(',');
-    if (pathFromCsv === route) {
-      return expected;
-    }
-  }
-  return undefined;
-}
+const csvPath = path.resolve(__dirname, '../data/expected-values.csv');
+const lines = fs.readFileSync(csvPath, 'utf8').split('\n').filter(Boolean);
 
-test('Validate /hello returns correct greeting', async ({ request }) => {
-  const expected = getExpectedResponse('/hello');
-  const response = await request.get('/hello');
-  expect(response.status()).toBe(200);
-  const body = await response.text();
-  expect(body).toContain(expected);
-});
+for (const line of lines) {
+  const [route, expectedHtml] = line.split(',');
+
+  test(`GET ${route} should return expected HTML`, async ({ request }) => {
+    const response = await request.get(route);
+    expect(response.status()).toBe(200);
+
+    const body = await response.text();
+    expect(body).toContain(expectedHtml);
+  });
+}
