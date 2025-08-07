@@ -4,16 +4,16 @@ pipeline {
     environment {
         TEST_CONTAINER = 'spring-hello-container'
         PROD_CONTAINER = 'spring-prod-container'
+        IMAGE_NAME = 'spring-hello:latest'
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
-        IMAGE_NAME = 'spring-hello'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git 'https://github.com/KeanVTC/springboot-ci-demo.git'
+                git 'https://github.com/KeanVTC/hello-world.git'
             }
         }
 
@@ -28,21 +28,21 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 dir('spring-hello') {
-                    bat "docker build -t %IMAGE_NAME% ."
+                    bat "docker build -t ${IMAGE_NAME} ."
                 }
             }
         }
 
         stage('Start Test Container') {
             steps {
-                echo "🚀 Starting test container..."
-                bat "docker rm -f %TEST_CONTAINER% || echo Test container not found."
-                bat "docker run -d --name %TEST_CONTAINER% -p %TEST_PORT%:%INTERNAL_PORT% %IMAGE_NAME%"
-                sleep time: 15, unit: 'SECONDS'
+                echo "🚀 Starting test container on port ${TEST_PORT}..."
+                bat "docker rm -f ${TEST_CONTAINER} || echo Test container not present"
+                bat "docker run -d --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
+                sleep time: 20, unit: 'SECONDS'
             }
         }
 
-        stage('Install Playwright Dependencies') {
+        stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
                     bat 'npm install'
@@ -61,7 +61,8 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                bat "docker stop %TEST_CONTAINER%"
+                echo "🛑 Stopping test container..."
+                bat "docker stop ${TEST_CONTAINER}"
             }
         }
 
@@ -70,42 +71,40 @@ pipeline {
                 expression { currentBuild.currentResult == 'SUCCESS' }
             }
             steps {
-                echo "🚢 Deploying production container..."
+                echo "🚀 Deploying to production container on port ${PROD_PORT}..."
                 script {
-                    def exists = bat(script: "docker ps -a -q -f name=%PROD_CONTAINER%", returnStdout: true).trim()
+                    def exists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
                     if (exists) {
-                        bat "docker stop %PROD_CONTAINER%"
-                        bat "docker rm %PROD_CONTAINER%"
+                        bat "docker stop ${PROD_CONTAINER}"
+                        bat "docker rm ${PROD_CONTAINER}"
                     }
                 }
-                bat "docker run -d --name %PROD_CONTAINER% -p %PROD_PORT%:%INTERNAL_PORT% %IMAGE_NAME%"
+                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
             }
         }
     }
 
     post {
-        always {
-            echo "🧹 Cleaning up..."
-            bat "docker rm -f %TEST_CONTAINER% || echo Already removed"
-            archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
-        }
-
         success {
-            echo "✅ Pipeline passed."
+            echo "✅ Pipeline succeeded: App deployed to port ${PROD_PORT}."
         }
-
         failure {
-            echo "❌ Pipeline failed."
+            echo "❌ Pipeline failed: Tests or deployment error."
+            echo "🧹 Cleaning up test container..."
+            bat "docker stop ${TEST_CONTAINER} || echo Test container already stopped"
+            bat "docker rm ${TEST_CONTAINER} || echo Already removed"
         }
-
         always {
+            echo '📦 CI/CD Pipeline completed.'
+            archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
+
             publishHTML(target: [
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
                 keepAll: true,
                 reportDir: 'spring-hello/playwright-tests/playwright-report',
                 reportFiles: 'index.html',
-                reportName: 'Playwright Test Report'
+                reportName: 'Playwright E2E Report'
             ])
         }
     }
