@@ -1,15 +1,30 @@
 pipeline {
     agent any
 
+    options {
+        timestamps()
+    }
+
+    parameters {
+        booleanParam(name: 'GENERATE_REPORT', defaultValue: true, description: 'Generate Playwright HTML report')
+    }
+
     environment {
         TEST_CONTAINER = 'spring-hello-container'
         PROD_CONTAINER = 'spring-prod-container'
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
+        IMAGE_NAME = 'spring-hello:latest'
     }
 
     stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/KeanVTC/springboot-ci-demo.git'
+            }
+        }
+
         stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
@@ -18,11 +33,43 @@ pipeline {
             }
         }
 
+        stage('Build Docker Image') {
+            steps {
+                dir('spring-hello') {
+                    echo "📦 Building Docker image ${IMAGE_NAME}..."
+                    bat "docker build -t ${IMAGE_NAME} ."
+                }
+            }
+        }
+
         stage('Start Test Container') {
             steps {
-                echo "Starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
-                bat "docker start ${TEST_CONTAINER}"
-                sleep time: 20, unit: 'SECONDS'
+                echo "🐳 Starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
+                bat "docker rm -f ${TEST_CONTAINER} || echo No existing test container"
+                bat "docker run -d --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
+            }
+        }
+
+        stage('Wait for Spring Boot Readiness') {
+            steps {
+                script {
+                    echo "⏳ Waiting for Spring Boot to be ready..."
+                    def retries = 10
+                    def success = false
+                    for (int i = 0; i < retries; i++) {
+                        def result = bat(script: "curl -s -o nul -w \"%{http_code}\" http://localhost:${TEST_PORT}/hello", returnStdout: true).trim()
+                        if (result == "200") {
+                            success = true
+                            echo "✅ Spring Boot app is ready!"
+                            break
+                        }
+                        echo "⏳ Attempt ${i+1}/${retries}... app not ready (got ${result})"
+                        sleep(time: 5, unit: 'SECONDS')
+                    }
+                    if (!success) {
+                        error "❌ Spring Boot app did not become ready in time!"
+                    }
+                }
             }
         }
 
@@ -38,44 +85,73 @@ pipeline {
         stage('Run E2E Test') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    bat 'npx playwright test'
+                    script {
+                        if (params.GENERATE_REPORT) {
+                            bat 'npx playwright test --reporter=html'
+                        } else {
+                            bat 'npx playwright test'
+                        }
+                    }
                 }
             }
         }
 
         stage('Stop Test Container') {
             steps {
-                echo "Stopping test container ${TEST_CONTAINER}..."
+                echo "🛑 Stopping test container ${TEST_CONTAINER}..."
                 bat "docker stop ${TEST_CONTAINER}"
             }
         }
 
         stage('Deploy to Production') {
+            when {
+                expression { currentBuild.currentResult == 'SUCCESS' }
+            }
             steps {
-                echo "Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
+                echo "🚀 Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
                 script {
                     def containerExists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
                     if (containerExists) {
+                        echo "🔁 Stopping and removing existing production container..."
                         bat "docker stop ${PROD_CONTAINER}"
                         bat "docker rm ${PROD_CONTAINER}"
                     }
                 }
-                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
             }
         }
     }
 
     post {
+        always {
+            echo '📦 CI/CD Pipeline completed.'
+
+            // Archive test reports
+            echo '📁 Archiving Playwright report...'
+            archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
+
+            // Publish Playwright HTML report
+            publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'spring-hello/playwright-tests/playwright-report',
+                reportFiles: 'index.html',
+                reportName: 'Playwright Test Report'
+            ])
+        }
+
         success {
             echo "✅ Pipeline passed: Tests succeeded and app deployed to port ${PROD_PORT}."
         }
+
         failure {
             echo "❌ Pipeline failed: Tests failed or deployment error."
-            echo "⛔ Cleaning up test container..."
-            bat "docker stop ${TEST_CONTAINER}" // Safe even if already stopped
         }
-        always {
-            echo '📦 CI/CD Pipeline completed.'
+
+        cleanup {
+            echo "🧹 Cleaning up containers..."
+            bat "docker rm -f ${TEST_CONTAINER} || echo Test container already removed"
         }
     }
 }
