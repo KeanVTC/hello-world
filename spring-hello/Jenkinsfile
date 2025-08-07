@@ -20,14 +20,14 @@ pipeline {
 
         stage('Start Test Container') {
             steps {
-                echo "Checking and starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
+                echo "🔍 Checking and starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
                 script {
-                    def containerId = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
-                    if (containerId?.trim()) {
+                    def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                    if (existsStatus == 0) {
                         echo "✅ Test container exists. Starting..."
                         bat "docker start ${TEST_CONTAINER}"
                     } else {
-                        echo "⚠️ Test container not found. Building image and creating new test container..."
+                        echo "⚠️ Test container not found. Building image and creating new container..."
                         dir('spring-hello') {
                             bat "docker build -t spring-hello:latest ."
                         }
@@ -58,10 +58,10 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                echo "Stopping test container ${TEST_CONTAINER}..."
+                echo "🛑 Stopping test container ${TEST_CONTAINER}..."
                 script {
-                    def containerExists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
-                    if (containerExists?.trim()) {
+                    def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                    if (existsStatus == 0) {
                         bat "docker stop ${TEST_CONTAINER}"
                     } else {
                         echo "No test container found to stop."
@@ -72,11 +72,11 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                echo "Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
+                echo "🚀 Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
                 script {
-                    def containerExists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
-                    if (containerExists?.trim()) {
-                        echo "🧹 Stopping and removing existing production container..."
+                    def existsStatus = bat(script: "docker inspect --type container ${PROD_CONTAINER}", returnStatus: true)
+                    if (existsStatus == 0) {
+                        echo "🧹 Removing existing production container..."
                         bat "docker stop ${PROD_CONTAINER}"
                         bat "docker rm ${PROD_CONTAINER}"
                     }
@@ -92,13 +92,13 @@ pipeline {
         }
         failure {
             echo "❌ Pipeline failed: Tests failed or deployment error."
-            echo "⛔ Cleaning up test container (if running)..."
+            echo "⛔ Cleaning up test container if needed..."
             script {
-                def containerExists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
-                if (containerExists?.trim()) {
+                def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                if (existsStatus == 0) {
                     bat "docker stop ${TEST_CONTAINER}"
                 } else {
-                    echo "No test container to stop."
+                    echo "No test container found to stop."
                 }
             }
         }
