@@ -1,24 +1,27 @@
 pipeline {
     agent any
+
     environment {
-        IMAGE_NAME = 'spring-hello-image'
-        CONTAINER_NAME = 'spring-hello-container'
+        APP_NAME = 'spring-hello'
+        IMAGE_NAME = "${APP_NAME}-image"
+        TEST_CONTAINER = "${APP_NAME}-container"
+        PROD_CONTAINER = "${APP_NAME}-prod"
+        TEST_PORT = '9090'
+        PROD_PORT = '9091'
         INTERNAL_PORT = '8086'
-        TEST_PORT = '8086'
-        PROD_PORT = '9090'
-        REPORT_PATH = 'spring-hello/playwright-tests/playwright-report'
+        REPORT_DIR = "${WORKSPACE}/playwright-tests/playwright-report"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git url: 'https://github.com/KeanVTC/hello-world.git', branch: 'main'
+                git 'https://github.com/KeanVTC/springboot-ci-demo'
             }
         }
 
-        stage('Build Spring Boot App') {
+        stage('Build with Maven') {
             steps {
-                dir('spring-hello') {
+                dir("${APP_NAME}") {
                     bat 'mvn clean package -DskipTests'
                 }
             }
@@ -26,7 +29,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                dir('spring-hello') {
+                dir("${APP_NAME}") {
                     bat "docker build -t ${IMAGE_NAME} ."
                 }
             }
@@ -34,17 +37,17 @@ pipeline {
 
         stage('Run Test Container') {
             steps {
-                bat "docker run -d --name ${CONTAINER_NAME} -p ${TEST_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
-                sleep(time: 10, unit: "SECONDS") // wait for app to boot
+                bat "docker run -d --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
+                sleep 10
             }
         }
 
         stage('Health Check') {
             steps {
                 script {
-                    def response = bat(script: "curl -s -o nul -w \"%{http_code}\" http://localhost:${TEST_PORT}", returnStdout: true).trim()
-                    if (response != "200") {
-                        error "Health check failed. Got HTTP ${response}"
+                    def result = bat(script: "curl -s -o nul -w \"%{http_code}\" http://localhost:${TEST_PORT}", returnStdout: true).trim()
+                    if (result != '200') {
+                        error("❌ Health check failed with status: ${result}")
                     }
                 }
             }
@@ -52,17 +55,16 @@ pipeline {
 
         stage('Install Playwright') {
             steps {
-                dir('spring-hello') {
-                    bat 'npm install'
-                    bat 'npx playwright install'
+                dir("${APP_NAME}/playwright-tests") {
+                    bat 'npm ci'
                 }
             }
         }
 
         stage('Run Playwright Tests') {
             steps {
-                dir('spring-hello') {
-                    bat 'npx playwright test'
+                dir("${APP_NAME}/playwright-tests") {
+                    bat "npx playwright test --reporter html"
                 }
             }
         }
@@ -70,10 +72,7 @@ pipeline {
         stage('Publish Playwright Report') {
             steps {
                 publishHTML([
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: "${REPORT_PATH}",
+                    reportDir: 'spring-hello/playwright-tests/playwright-report',
                     reportFiles: 'index.html',
                     reportName: 'Playwright Test Report'
                 ])
@@ -82,26 +81,25 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                bat "docker stop ${CONTAINER_NAME} || exit 0"
-                bat "docker rm ${CONTAINER_NAME} || exit 0"
+                bat "docker stop ${TEST_CONTAINER} || exit 0"
+                bat "docker rm ${TEST_CONTAINER} || exit 0"
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                bat "docker run -d --name ${CONTAINER_NAME} -p ${PROD_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
+                bat "docker stop ${PROD_CONTAINER} || exit 0"
+                bat "docker rm ${PROD_CONTAINER} || exit 0"
+                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
             }
         }
     }
 
     post {
         failure {
-            echo "❌ Pipeline failed. Cleaning up..."
-            bat "docker stop ${CONTAINER_NAME} || exit 0"
-            bat "docker rm ${CONTAINER_NAME} || exit 0"
-        }
-        success {
-            echo "✅ Pipeline completed successfully!"
+            echo '❌ Pipeline failed. Cleaning up...'
+            bat "docker stop ${TEST_CONTAINER} || exit 0"
+            bat "docker rm ${TEST_CONTAINER} || exit 0"
         }
     }
 }
