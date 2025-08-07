@@ -2,35 +2,33 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'spring-hello'
-        CONTAINER_NAME = 'spring-hello-container'
+        APP_NAME = 'spring-hello'
+        JAR_NAME = 'springboot-ci-demo-0.0.1-SNAPSHOT.jar'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
+        INTERNAL_PORT = '8086'
+        TEST_CONTAINER = "${APP_NAME}-container"
+        PROD_CONTAINER = "${APP_NAME}-prod"
     }
 
     stages {
         stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
-                    bat 'mvn clean package -DskipTests'
+                    bat "mvn clean package -DskipTests"
                 }
             }
         }
 
         stage('Start Test Container') {
             steps {
-                echo "Starting test container ${CONTAINER_NAME} on port ${TEST_PORT}..."
+                echo "Starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
                 dir('spring-hello') {
                     script {
-                        def containerExists = bat(script: "docker ps -a -q -f name=${CONTAINER_NAME}", returnStdout: true).trim()
-                        if (containerExists == "") {
-                            echo "Test container doesn't exist. Creating..."
-                            bat "docker build -t ${IMAGE_NAME} ."
-                            bat "docker run -d -p ${TEST_PORT}:8086 --name ${CONTAINER_NAME} ${IMAGE_NAME}"
-                        } else {
-                            echo "Container exists. Starting..."
-                            bat "docker start ${CONTAINER_NAME}"
-                        }
+                        def imageName = "${APP_NAME}-image"
+                        bat "docker build -t ${imageName} ."
+                        bat "docker rm -f ${TEST_CONTAINER} || exit 0"
+                        bat "docker run -d --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} ${imageName}"
                     }
                 }
             }
@@ -54,25 +52,19 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                echo "Stopping test container..."
-                bat "docker stop ${CONTAINER_NAME}"
+                bat "docker stop ${TEST_CONTAINER} || exit 0"
+                bat "docker rm ${TEST_CONTAINER} || exit 0"
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                echo "Deploying to production on port ${PROD_PORT}..."
-                script {
-                    def prodContainerId = bat(script: "docker ps -aqf name=prod-${CONTAINER_NAME}", returnStdout: true).trim()
-                    if (prodContainerId != "") {
-                        echo "Stopping and removing existing production container..."
-                        bat "docker stop prod-${CONTAINER_NAME}"
-                        bat "docker rm prod-${CONTAINER_NAME}"
-                    }
-                    echo "Starting new production container..."
-                    dir('spring-hello') {
-                        bat "docker build -t ${IMAGE_NAME} ."
-                        bat "docker run -d -p ${PROD_PORT}:8086 --name prod-${CONTAINER_NAME} ${IMAGE_NAME}"
+                echo "Deploying to production container ${PROD_CONTAINER} on port ${PROD_PORT}..."
+                dir('spring-hello') {
+                    script {
+                        def imageName = "${APP_NAME}-image"
+                        bat "docker rm -f ${PROD_CONTAINER} || exit 0"
+                        bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} ${imageName}"
                     }
                 }
             }
@@ -86,7 +78,8 @@ pipeline {
         failure {
             echo "❌ Pipeline failed: Tests failed or deployment error."
             echo "⛔ Cleaning up test container..."
-            bat script: "docker stop ${CONTAINER_NAME}", returnStatus: true
+            bat "docker stop ${TEST_CONTAINER} || exit 0"
+            bat "docker rm ${TEST_CONTAINER} || exit 0"
         }
     }
 }

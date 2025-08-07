@@ -1,6 +1,12 @@
-const { test, expect } = require('@playwright/test');
+// spring-hello/playwright.config.js
+import { defineConfig } from '@playwright/test';
 
-test('Hello World page should load', async ({ page }) => {
-  await page.goto('http://localhost:9090');
-  await expect(page.locator('body')).toContainText('Hello World');
+export default defineConfig({
+  testDir: './playwright-tests',
+  timeout: 10000,
+  retries: 0,
+  use: {
+    baseURL: 'http://localhost:9090',
+    headless: true,
+  },
 });
