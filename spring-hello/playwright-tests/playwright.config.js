@@ -1,12 +1,8 @@
-// spring-hello/playwright.config.js
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './playwright-tests',
-  timeout: 10000,
-  retries: 0,
   use: {
-    baseURL: 'http://localhost:9090',
-    headless: true,
+    baseURL: 'http://localhost:9090', // test container port
   },
+  reporter: [['html', { outputFolder: 'playwright-report', open: 'never' }]],
 });
