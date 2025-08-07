@@ -22,8 +22,8 @@ pipeline {
             steps {
                 echo "Checking and starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
                 script {
-                    def containerExists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
-                    if (containerExists) {
+                    def containerId = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
+                    if (containerId?.trim()) {
                         echo "✅ Test container exists. Starting..."
                         bat "docker start ${TEST_CONTAINER}"
                     } else {
@@ -59,7 +59,14 @@ pipeline {
         stage('Stop Test Container') {
             steps {
                 echo "Stopping test container ${TEST_CONTAINER}..."
-                bat "docker stop ${TEST_CONTAINER}"
+                script {
+                    def containerExists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
+                    if (containerExists?.trim()) {
+                        bat "docker stop ${TEST_CONTAINER}"
+                    } else {
+                        echo "No test container found to stop."
+                    }
+                }
             }
         }
 
@@ -68,7 +75,7 @@ pipeline {
                 echo "Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
                 script {
                     def containerExists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
-                    if (containerExists) {
+                    if (containerExists?.trim()) {
                         echo "🧹 Stopping and removing existing production container..."
                         bat "docker stop ${PROD_CONTAINER}"
                         bat "docker rm ${PROD_CONTAINER}"
@@ -86,7 +93,14 @@ pipeline {
         failure {
             echo "❌ Pipeline failed: Tests failed or deployment error."
             echo "⛔ Cleaning up test container (if running)..."
-            bat "docker stop ${TEST_CONTAINER}" // Safe even if already stopped
+            script {
+                def containerExists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
+                if (containerExists?.trim()) {
+                    bat "docker stop ${TEST_CONTAINER}"
+                } else {
+                    echo "No test container to stop."
+                }
+            }
         }
         always {
             echo '📦 CI/CD Pipeline completed.'
