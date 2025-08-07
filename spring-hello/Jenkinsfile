@@ -51,13 +51,13 @@ pipeline {
         stage('Run Playwright E2E Tests') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    bat 'npx playwright test'
+                    bat 'npx playwright show-report playwright-report'
                 }
             }
             post {
                 always {
                     dir('spring-hello/playwright-tests') {
-                        bat 'npx playwright show-report'
+                        bat 'npx playwright show-report playwright-report'
                     }
 
                     publishHTML([
