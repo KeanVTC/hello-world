@@ -1,19 +1,18 @@
 pipeline {
     agent any
-
     environment {
-        DOCKER_IMAGE = 'spring-hello-image'
+        IMAGE_NAME = 'spring-hello-image'
         CONTAINER_NAME = 'spring-hello-container'
-        HOST_PORT = '9090'             // production port (host)
-        CONTAINER_PORT = '8086'        // container's exposed port
-        BASE_URL = "http://localhost:${HOST_PORT}"
-        REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
+        INTERNAL_PORT = '8086'
+        TEST_PORT = '8086'
+        PROD_PORT = '9090'
+        REPORT_PATH = 'spring-hello/playwright-tests/playwright-report'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git 'https://github.com/KeanVTC/springboot-ci-demo'
+                git url: 'https://github.com/KeanVTC/hello-world.git', branch: 'main'
             }
         }
 
@@ -28,34 +27,33 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 dir('spring-hello') {
-                    bat "docker build -t ${DOCKER_IMAGE} ."
+                    bat "docker build -t ${IMAGE_NAME} ."
                 }
             }
         }
 
         stage('Run Test Container') {
             steps {
-                bat "docker run -d -p ${HOST_PORT}:${CONTAINER_PORT} --name ${CONTAINER_NAME} ${DOCKER_IMAGE}"
+                bat "docker run -d --name ${CONTAINER_NAME} -p ${TEST_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
+                sleep(time: 10, unit: "SECONDS") // wait for app to boot
             }
         }
 
         stage('Health Check') {
             steps {
-                bat """
-                echo Checking if Spring Boot app is up...
-                for /l %%i in (1,1,10) do (
-                    curl -s ${BASE_URL}/ && exit /b 0
-                    timeout /t 3 >nul
-                )
-                exit /b 1
-                """
+                script {
+                    def response = bat(script: "curl -s -o nul -w \"%{http_code}\" http://localhost:${TEST_PORT}", returnStdout: true).trim()
+                    if (response != "200") {
+                        error "Health check failed. Got HTTP ${response}"
+                    }
+                }
             }
         }
 
         stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
-                    bat 'npm ci'
+                    bat 'npm install'
                     bat 'npx playwright install'
                 }
             }
@@ -63,24 +61,21 @@ pipeline {
 
         stage('Run Playwright Tests') {
             steps {
-                dir('spring-hello/playwright-tests') {
-                    bat 'npx playwright test --reporter html'
+                dir('spring-hello') {
+                    bat 'npx playwright test'
                 }
             }
         }
 
         stage('Publish Playwright Report') {
-            when {
-                expression { fileExists("${REPORT_DIR}/index.html") }
-            }
             steps {
-                publishHTML(target: [
+                publishHTML([
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true,
-                    reportDir: "${REPORT_DIR}",
+                    reportDir: "${REPORT_PATH}",
                     reportFiles: 'index.html',
-                    reportName: 'Playwright Report'
+                    reportName: 'Playwright Test Report'
                 ])
             }
         }
@@ -93,24 +88,20 @@ pipeline {
         }
 
         stage('Deploy to Production') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
             steps {
-                echo "🚀 Deploying to production (port 9090)..."
-                // Add deployment steps here if needed
+                bat "docker run -d --name ${CONTAINER_NAME} -p ${PROD_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
             }
         }
     }
 
     post {
         failure {
-            echo '❌ Pipeline failed. Cleaning up...'
+            echo "❌ Pipeline failed. Cleaning up..."
             bat "docker stop ${CONTAINER_NAME} || exit 0"
             bat "docker rm ${CONTAINER_NAME} || exit 0"
         }
-        always {
-            echo '✅ Pipeline completed.'
+        success {
+            echo "✅ Pipeline completed successfully!"
         }
     }
 }
