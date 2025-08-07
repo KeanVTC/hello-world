@@ -20,14 +20,14 @@ pipeline {
 
         stage('Start Test Container') {
             steps {
-                echo "🧪 Checking and starting test container..."
+                echo "Checking and starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
                 script {
                     def containerId = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
                     if (containerId) {
-                        echo "✅ Test container exists. Starting it..."
+                        echo "✅ Test container exists. Starting..."
                         bat "docker start ${TEST_CONTAINER}"
                     } else {
-                        echo "⚙️ Building image and creating new test container..."
+                        echo "⚠️ Test container not found. Building image and creating new test container..."
                         dir('spring-hello') {
                             bat "docker build -t spring-hello:latest ."
                         }
@@ -48,7 +48,7 @@ pipeline {
             }
         }
 
-        stage('Run E2E Tests') {
+        stage('Run E2E Test') {
             steps {
                 dir('spring-hello') {
                     bat 'npm test'
@@ -59,10 +59,12 @@ pipeline {
         stage('Verify Test Report') {
             steps {
                 echo "📊 Verifying Playwright test results..."
-                script {
-                    def result = bat(script: 'groovy spring-hello/playwright-tests/verifyTestResults.groovy', returnStatus: true)
-                    if (result != 0) {
-                        error("❌ Tests failed. Deployment to production aborted.")
+                dir('spring-hello/playwright-tests') {
+                    script {
+                        def result = bat(script: 'groovy verifyTestResults.groovy', returnStatus: true)
+                        if (result != 0) {
+                            error("❌ Tests failed. Deployment to production aborted.")
+                        }
                     }
                 }
             }
@@ -70,13 +72,13 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                echo "🛑 Stopping test container..."
+                echo "Stopping test container ${TEST_CONTAINER}..."
                 script {
-                    def exists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
-                    if (exists) {
+                    def containerExists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
+                    if (containerExists) {
                         bat "docker stop ${TEST_CONTAINER}"
                     } else {
-                        echo "No test container found."
+                        echo "No test container found to stop."
                     }
                 }
             }
@@ -84,11 +86,11 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                echo "🚀 Deploying to production container on port ${PROD_PORT}..."
+                echo "🚀 Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
                 script {
-                    def exists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
-                    if (exists) {
-                        echo "♻️ Removing existing production container..."
+                    def containerExists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
+                    if (containerExists) {
+                        echo "🧹 Stopping and removing existing production container..."
                         bat "docker stop ${PROD_CONTAINER}"
                         bat "docker rm ${PROD_CONTAINER}"
                     }
@@ -100,19 +102,22 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline success! App deployed to production on port ${PROD_PORT}."
+            echo "✅ Pipeline passed: Tests succeeded and app deployed to port ${PROD_PORT}."
         }
         failure {
-            echo "❌ Pipeline failed. Cleaning up test container if it exists..."
+            echo "❌ Pipeline failed: Tests failed or deployment error."
+            echo "⛔ Cleaning up test container (if running)..."
             script {
-                def exists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
-                if (exists) {
+                def containerExists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
+                if (containerExists) {
                     bat "docker stop ${TEST_CONTAINER}"
+                } else {
+                    echo "No test container to stop."
                 }
             }
         }
         always {
-            echo '📦 CI/CD pipeline execution complete.'
+            echo '📦 CI/CD Pipeline completed.'
         }
     }
 }
