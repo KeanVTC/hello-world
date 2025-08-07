@@ -2,15 +2,22 @@ pipeline {
     agent any
 
     environment {
-        TEST_CONTAINER = 'spring-hello-container'
-        PROD_CONTAINER = 'spring-prod-container'
-        INTERNAL_PORT = '8086'
+        IMAGE_NAME = 'spring-hello-image'
+        TEST_CONTAINER = 'spring-hello-test'
+        PROD_CONTAINER = 'spring-hello-prod'
+        INTERNAL_PORT = '8080'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
     }
 
     stages {
-        stage('Build Spring Boot App') {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/KeanVTC/springboot-ci-demo.git'
+            }
+        }
+
+        stage('Build Spring Boot JAR') {
             steps {
                 dir('spring-hello') {
                     bat 'mvn clean package -DskipTests'
@@ -18,10 +25,20 @@ pipeline {
             }
         }
 
+        stage('Build Docker Image') {
+            steps {
+                dir('spring-hello') {
+                    bat "docker build -t ${IMAGE_NAME} ."
+                }
+            }
+        }
+
         stage('Start Test Container') {
             steps {
-                echo "Starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
-                bat "docker start ${TEST_CONTAINER}"
+                bat """
+                docker rm -f ${TEST_CONTAINER} || echo No container to remove
+                docker run -d --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}
+                """
                 sleep time: 20, unit: 'SECONDS'
             }
         }
@@ -35,57 +52,56 @@ pipeline {
             }
         }
 
-        stage('Run E2E Test') {
+        stage('Run E2E Tests') {
             steps {
-                dir('spring-hello') {
-                    bat 'npm test'
+                dir('spring-hello/playwright-tests') {
+                    bat 'npx playwright test --reporter=html'
                 }
             }
         }
 
         stage('Stop Test Container') {
             steps {
-                echo "Stopping test container ${TEST_CONTAINER}..."
                 bat "docker stop ${TEST_CONTAINER}"
+                bat "docker rm ${TEST_CONTAINER}"
             }
         }
 
         stage('Deploy to Production') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
             steps {
-                echo "Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
                 script {
-                    def containerExists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
-                    if (containerExists) {
+                    def exists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
+                    if (exists) {
                         bat "docker stop ${PROD_CONTAINER}"
                         bat "docker rm ${PROD_CONTAINER}"
                     }
                 }
-                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} ${IMAGE_NAME}"
             }
         }
     }
 
     post {
         always {
-            echo '📦 CI/CD Pipeline completed.'
-            archiveArtifacts artifacts: 'spring-hello/playwright-report/**', allowEmptyArchive: true
+            echo "📦 Pipeline completed."
+            archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
             publishHTML(target: [
+                reportDir: 'spring-hello/playwright-tests/playwright-report',
+                reportFiles: 'index.html',
+                reportName: 'Playwright Test Report',
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
-                keepAll: true,
-                reportDir: 'spring-hello/playwright-report',
-                reportFiles: 'index.html',
-                reportName: 'Playwright Test Report'
+                keepAll: true
             ])
         }
-
         success {
-            echo "✅ Pipeline passed: Tests succeeded and app deployed to port ${PROD_PORT}."
+            echo '✅ Build + Test + Deploy Successful!'
         }
-
         failure {
-            echo "❌ Pipeline failed: Tests failed or deployment error."
-            bat "docker stop ${TEST_CONTAINER}"
+            echo '❌ Something failed. Clean-up and check logs.'
         }
     }
 }

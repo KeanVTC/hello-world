@@ -1,14 +1,12 @@
-// playwright.config.js
+// spring-hello/playwright.config.js
+import { defineConfig } from '@playwright/test';
 
-const { defineConfig } = require('@playwright/test');
-
-module.exports = defineConfig({
-  testDir: './tests',
-  timeout: 30000,
+export default defineConfig({
+  testDir: './playwright-tests',
+  timeout: 10000,
   retries: 0,
   use: {
     baseURL: 'http://localhost:9090',
     headless: true,
   },
-  reporter: [['html', { outputFolder: '../playwright-report', open: 'never' }]],
 });

@@ -1,18 +1,13 @@
-const { test, expect } = require('@playwright/test');
-const fs = require('fs');
-const path = require('path');
+// spring-hello/playwright-tests/hello-world.spec.js
+import { test, expect } from '@playwright/test';
+import fs from 'fs';
 
-const csvPath = path.resolve(__dirname, '../data/expected-values.csv');
-const lines = fs.readFileSync(csvPath, 'utf8').split('\n').filter(Boolean);
+test('Check expected response from /hello', async ({ request }) => {
+  const csv = fs.readFileSync('./playwright-tests/data/expected-values.csv', 'utf-8');
+  const [path, expectedHtml] = csv.trim().split(',');
 
-for (const line of lines) {
-  const [route, expectedHtml] = line.split(',');
-
-  test(`GET ${route} should return expected HTML`, async ({ request }) => {
-    const response = await request.get(route);
-    expect(response.status()).toBe(200);
-
-    const body = await response.text();
-    expect(body).toContain(expectedHtml);
-  });
-}
+  const response = await request.get(path);
+  expect(response.status()).toBe(200);
+  const body = await response.text();
+  expect(body.trim()).toBe(expectedHtml.trim());
+});

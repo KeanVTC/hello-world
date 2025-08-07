@@ -1,5 +1,5 @@
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk
 WORKDIR /app
-COPY target/spring-hello.jar app.jar
-EXPOSE 8086
+COPY target/*.jar app.jar
+EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
