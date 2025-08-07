@@ -30,18 +30,20 @@
     </dependency>
   </dependencies>
 
-  <build>
-    <plugins>
-      <plugin>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-maven-plugin</artifactId>
-        <configuration>
-          <image>
-            <build>false</build> <!-- Disable Docker image build -->
-          </image>
-        </configuration>
-      </plugin>
-    </plugins>
-  </build>
+<build>
+  <finalName>springboot-ci-demo-0.0.1-SNAPSHOT</finalName>
+  <plugins>
+    <plugin>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-maven-plugin</artifactId>
+      <configuration>
+        <image>
+          <build>false</build>
+        </image>
+      </configuration>
+    </plugin>
+  </plugins>
+</build>
+
 
 </project>
