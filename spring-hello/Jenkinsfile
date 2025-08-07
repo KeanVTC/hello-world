@@ -90,12 +90,11 @@ pipeline {
         }
         failure {
             echo "❌ Pipeline failed: Tests or deployment error."
-            echo "🧹 Cleaning up test container..."
-            bat "docker stop ${TEST_CONTAINER} || echo Test container already stopped"
+            bat "docker stop ${TEST_CONTAINER} || echo Already stopped"
             bat "docker rm ${TEST_CONTAINER} || echo Already removed"
         }
         always {
-            echo '📦 CI/CD Pipeline completed.'
+            echo '📦 Archiving and publishing test report...'
             archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
 
             publishHTML(target: [
