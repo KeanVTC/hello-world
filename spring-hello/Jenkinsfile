@@ -2,21 +2,15 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'springboot-ci-demo'
-        CONTAINER_NAME = 'springboot-ci-demo-container'
-        HOST_PORT = '9090'
-        CONTAINER_PORT = '8080'
+        TEST_CONTAINER = 'spring-hello-container'
+        PROD_CONTAINER = 'spring-prod-container'
+        INTERNAL_PORT = '8086'
+        TEST_PORT = '9090'
+        PROD_PORT = '9091'
     }
 
     stages {
-
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Build with Maven') {
+        stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
                     bat 'mvn clean package -DskipTests'
@@ -27,26 +21,29 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 dir('spring-hello') {
-                    bat "docker build -t %IMAGE_NAME% ."
+                    bat "docker build -t spring-hello:latest ."
                 }
             }
         }
 
-        stage('Run Docker Container') {
+        stage('Start Test Container') {
             steps {
                 script {
-                    bat "docker rm -f %CONTAINER_NAME% || exit 0"
-                    bat "docker run -d --name %CONTAINER_NAME% -p %HOST_PORT%:%CONTAINER_PORT% %IMAGE_NAME%"
-                    echo 'Waiting for app to start...'
-                    sleep 15
+                    def containerExists = bat(script: "docker ps -a -q -f name=${TEST_CONTAINER}", returnStdout: true).trim()
+                    if (containerExists) {
+                        bat "docker rm -f ${TEST_CONTAINER}"
+                    }
                 }
+                bat "docker run -d --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                sleep time: 20, unit: 'SECONDS'
             }
         }
 
-        stage('Install Node Modules for Playwright') {
+        stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
                     bat 'npm install'
+                    bat 'npx playwright install'
                 }
             }
         }
@@ -55,26 +52,40 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     bat 'npx playwright test'
-                    bat 'npx playwright show-report --report-dir=playwright-report'
                 }
             }
         }
 
-        stage('Archive Playwright Report') {
+        stage('Stop Test Container') {
             steps {
-                dir('spring-hello/playwright-tests') {
-                    archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
-                }
+                bat "docker stop ${TEST_CONTAINER}"
             }
         }
 
+        stage('Deploy to Production') {
+            steps {
+                script {
+                    def prodExists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
+                    if (prodExists) {
+                        bat "docker stop ${PROD_CONTAINER}"
+                        bat "docker rm ${PROD_CONTAINER}"
+                    }
+                }
+                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
+            }
+        }
     }
 
     post {
+        success {
+            echo "✅ Pipeline passed: App deployed to production port ${PROD_PORT}."
+        }
+        failure {
+            echo "❌ Pipeline failed. Cleaning up test container..."
+            bat "docker stop ${TEST_CONTAINER} || exit 0"
+        }
         always {
-            script {
-                bat "docker rm -f %CONTAINER_NAME% || exit 0"
-            }
+            echo "📦 Pipeline finished."
         }
     }
 }
