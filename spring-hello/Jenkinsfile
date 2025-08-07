@@ -2,9 +2,8 @@ pipeline {
     agent any
 
     environment {
-        TEST_CONTAINER = 'spring-hello-container'
-        PROD_CONTAINER = 'spring-prod-container'
-        INTERNAL_PORT = '8086'
+        IMAGE_NAME = 'spring-hello'
+        CONTAINER_NAME = 'spring-hello-container'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
     }
@@ -20,24 +19,34 @@ pipeline {
 
         stage('Start Test Container') {
             steps {
-                echo "Starting test container ${TEST_CONTAINER} on port ${TEST_PORT}..."
-                bat "docker start ${TEST_CONTAINER}"
-                sleep time: 20, unit: 'SECONDS'
+                echo "Starting test container ${CONTAINER_NAME} on port ${TEST_PORT}..."
+                dir('spring-hello') {
+                    script {
+                        def containerExists = bat(script: "docker ps -a -q -f name=${CONTAINER_NAME}", returnStdout: true).trim()
+                        if (containerExists == "") {
+                            echo "Test container doesn't exist. Creating..."
+                            bat "docker build -t ${IMAGE_NAME} ."
+                            bat "docker run -d -p ${TEST_PORT}:8086 --name ${CONTAINER_NAME} ${IMAGE_NAME}"
+                        } else {
+                            echo "Container exists. Starting..."
+                            bat "docker start ${CONTAINER_NAME}"
+                        }
+                    }
+                }
             }
         }
 
         stage('Install Playwright') {
             steps {
-                dir('spring-hello/playwright') {
-                    bat 'npm install'
-                    bat 'npx playwright install'
+                dir('spring-hello') {
+                    bat 'npm ci'
                 }
             }
         }
 
         stage('Run E2E Test') {
             steps {
-                dir('spring-hello/playwright-tests') {
+                dir('spring-hello') {
                     bat 'npx playwright test'
                 }
             }
@@ -45,37 +54,39 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                echo "Stopping test container ${TEST_CONTAINER}..."
-                bat "docker stop ${TEST_CONTAINER}"
+                echo "Stopping test container..."
+                bat "docker stop ${CONTAINER_NAME}"
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                echo "Deploying to production container ${PROD_CONTAINER} (port ${PROD_PORT}:${INTERNAL_PORT})..."
+                echo "Deploying to production on port ${PROD_PORT}..."
                 script {
-                    def containerExists = bat(script: "docker ps -a -q -f name=${PROD_CONTAINER}", returnStdout: true).trim()
-                    if (containerExists) {
-                        bat "docker stop ${PROD_CONTAINER}"
-                        bat "docker rm ${PROD_CONTAINER}"
+                    def prodContainerId = bat(script: "docker ps -aqf name=prod-${CONTAINER_NAME}", returnStdout: true).trim()
+                    if (prodContainerId != "") {
+                        echo "Stopping and removing existing production container..."
+                        bat "docker stop prod-${CONTAINER_NAME}"
+                        bat "docker rm prod-${CONTAINER_NAME}"
+                    }
+                    echo "Starting new production container..."
+                    dir('spring-hello') {
+                        bat "docker build -t ${IMAGE_NAME} ."
+                        bat "docker run -d -p ${PROD_PORT}:8086 --name prod-${CONTAINER_NAME} ${IMAGE_NAME}"
                     }
                 }
-                bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
             }
         }
     }
 
     post {
-        success {
-            echo "✅ Pipeline passed: Tests succeeded and app deployed to port ${PROD_PORT}."
+        always {
+            echo "📦 CI/CD Pipeline completed."
         }
         failure {
             echo "❌ Pipeline failed: Tests failed or deployment error."
             echo "⛔ Cleaning up test container..."
-            bat "docker stop ${TEST_CONTAINER}" // Safe even if already stopped
-        }
-        always {
-            echo '📦 CI/CD Pipeline completed.'
+            bat script: "docker stop ${CONTAINER_NAME}", returnStatus: true
         }
     }
 }

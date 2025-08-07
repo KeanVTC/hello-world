@@ -1,5 +1,6 @@
-module.exports = {
-  use: {
-    baseURL: 'http://localhost:9090', // or whatever port is used for testing
-  }
-};
+const { test, expect } = require('@playwright/test');
+
+test('Hello World page should load', async ({ page }) => {
+  await page.goto('http://localhost:9090');
+  await expect(page.locator('body')).toContainText('Hello World');
+});
