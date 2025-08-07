@@ -51,8 +51,23 @@ pipeline {
         stage('Run E2E Test') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    bat 'npx playwright test'
+                    bat 'npx playwright test --reporter=html'
                 }
+            }
+        }
+
+        stage('Publish Test Report') {
+            steps {
+                echo "📊 Archiving and publishing Playwright report..."
+                // Enhancement #1: Archive HTML report
+                archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: true
+
+                // Enhancement #2: Show HTML report in Jenkins UI
+                publishHTML(target: [
+                    reportDir: 'spring-hello/playwright-tests/playwright-report',
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright E2E Test Report'
+                ])
             }
         }
 
