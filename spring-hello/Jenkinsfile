@@ -9,6 +9,7 @@ pipeline {
         PROD_PORT = '9091'
         BASE_TEST_URL = "http://localhost:${TEST_PORT}"
         BASE_PROD_URL = "http://localhost:${PROD_PORT}"
+        REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
     }
 
     stages {
@@ -60,7 +61,7 @@ pipeline {
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_TEST_URL}
-                                npx playwright test --reporter=html --project=chromium
+                                npx playwright test --reporter=html --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
                         )
@@ -72,13 +73,13 @@ pipeline {
             }
         }
 
-        stage('Publish Test Report') {
+        stage('Publish Shared Report') {
             steps {
-                echo "📊 Publishing test report (Test)..."
+                echo "📊 Publishing shared Playwright test report..."
                 publishHTML(target: [
-                    reportDir: 'spring-hello/playwright-tests/playwright-report',
+                    reportDir: "${REPORT_DIR}",
                     reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Report (Test)',
+                    reportName: 'Playwright E2E Report (All)',
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true
@@ -108,7 +109,7 @@ pipeline {
                         bat "docker rm ${PROD_CONTAINER}"
                     }
                     bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
-                    sleep time: 15, unit: 'SECONDS' // Give time for app to boot
+                    sleep time: 15, unit: 'SECONDS'
                 }
             }
         }
@@ -121,7 +122,7 @@ pipeline {
                         def prodTestStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_PROD_URL}
-                                npx playwright test --reporter=html --project=chromium
+                                npx playwright test --reporter=html --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
                         )
@@ -132,28 +133,14 @@ pipeline {
                 }
             }
         }
-
-        stage('Publish Test Report (Production)') {
-            steps {
-                echo "📊 Publishing test report (Production)..."
-                publishHTML(target: [
-                    reportDir: 'spring-hello/playwright-tests/playwright-report',
-                    reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Report (Production)',
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true
-                ])
-            }
-        }
     }
 
     post {
         success {
-            echo "✅ Pipeline SUCCESS: Application deployed and validated successfully."
+            echo "✅ Pipeline SUCCESS: App deployed and E2E tested."
         }
         failure {
-            echo "❌ Pipeline FAILED. Cleaning up test container..."
+            echo "❌ Pipeline FAILED. Attempting test container cleanup..."
             script {
                 def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
                 if (exists == 0) {
@@ -162,7 +149,7 @@ pipeline {
             }
         }
         always {
-            echo '📦 CI/CD Pipeline complete.'
+            echo '📦 CI/CD pipeline complete.'
         }
     }
 }
