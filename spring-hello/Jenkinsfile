@@ -57,9 +57,6 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests..."
                     script {
-                        // Clean up old report first
-                        bat 'rmdir /s /q playwright-report || exit 0'
-
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_URL}
@@ -84,20 +81,15 @@ pipeline {
                         error("❌ Playwright report not found. Check test execution.")
                     }
                 }
-
-                // ✅ Publish HTML report with overwrite enabled
                 publishHTML(target: [
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
-                    keepAll: false,
+                    keepAll: true,
                     reportDir: 'spring-hello/playwright-tests/playwright-report',
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Test Report',
                     reportTitles: 'Playwright Test Results'
                 ])
-
-                // ✅ Archive full report for download
-                archiveArtifacts artifacts: 'spring-hello/playwright-tests/playwright-report/**', allowEmptyArchive: false
             }
         }
 
