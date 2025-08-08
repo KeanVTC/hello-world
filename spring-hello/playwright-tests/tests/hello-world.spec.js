@@ -22,17 +22,19 @@ function getExpectedResponse(route) {
   throw new Error(`❌ Expected value for route "${route}" not found in CSV.`);
 }
 
-// ✅ Main test
-test.describe('API Route Validation', () => {
+// ✅ Main test 
+test.describe('API Route Validation (Hardcoded URL)', () => {
   const route = '/hello';
+  const fullUrl = `http://localhost:9090${route}`;
 
   test(`GET ${route} should return correct greeting`, async ({ request }) => {
     const expected = getExpectedResponse(route);
 
-    const response = await request.get(route); // uses baseURL from config
+    const response = await request.get(fullUrl); // hardcoded full URL
     expect(response.status(), 'Expected HTTP 200 OK').toBe(200);
 
     const body = await response.text();
     expect(body, `Expected body to contain "${expected}"`).toContain(expected);
   });
 });
+
