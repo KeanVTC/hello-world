@@ -56,13 +56,13 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Test)..."
-                    bat 'rmdir /s /q playwright-report-test'
+                    bat 'rmdir /s /q playwright-report-test || echo No report to delete'
                     script {
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_TEST_URL}
                                 npx playwright test --reporter=html --project=chromium
-                                xcopy /E /I /Y playwright-report ..\\playwright-report-test
+                                move /Y playwright-report ..\\playwright-report-test
                             """,
                             returnStatus: true
                         )
@@ -90,7 +90,7 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                echo "🛙 Stopping test container..."
+                echo "🛑 Stopping test container..."
                 script {
                     def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
                     if (exists == 0) {
@@ -107,9 +107,12 @@ pipeline {
                     def exists = bat(script: "docker inspect --type container ${PROD_CONTAINER}", returnStatus: true)
                     if (exists == 0) {
                         bat "docker stop ${PROD_CONTAINER}"
-                        bat "docker rm ${PROD_CONTAINER}"
+                        echo "🔁 Restarting existing production container"
+                    } else {
+                        bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                        echo "🆕 New production container started"
                     }
-                    bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                    bat "docker start ${PROD_CONTAINER}"
                     sleep time: 15, unit: 'SECONDS'
                 }
             }
@@ -119,13 +122,13 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Production)..."
-                    bat 'rmdir /s /q playwright-report-prod'
+                    bat 'rmdir /s /q playwright-report-prod || echo No prod report to delete'
                     script {
                         def prodTestStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_PROD_URL}
                                 npx playwright test --reporter=html --project=chromium
-                                xcopy /E /I /Y playwright-report ..\\playwright-report-prod
+                                move /Y playwright-report ..\\playwright-report-prod
                             """,
                             returnStatus: true
                         )
