@@ -8,8 +8,6 @@ pipeline {
         TEST_PORT = '9090'
         PROD_PORT = '9091'
         BASE_URL = "http://localhost:${TEST_PORT}"
-        REPORT_PORT = '7070'
-        REPORT_PATH = 'spring-hello/playwright-tests/playwright-report'
     }
 
     stages {
@@ -44,13 +42,12 @@ pipeline {
             }
         }
 
-        stage('Install Playwright & Tools') {
+        stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
-                    echo "🧪 Installing Playwright and http-server..."
+                    echo "🧪 Installing Playwright..."
                     bat 'npm ci'
                     bat 'npx playwright install'
-                    bat 'npm install http-server --save-dev'
                 }
             }
         }
@@ -75,11 +72,25 @@ pipeline {
             }
         }
 
+        stage('Rename HTML Report with Timestamp') {
+            steps {
+                dir('spring-hello/playwright-tests/playwright-report') {
+                    echo "📁 Renaming report to include timestamp..."
+                    script {
+                        def timestamp = new Date().format("yyyyMMdd-HHmm")
+                        env.REPORT_NAME = "report-${timestamp}.html"
+                        bat "copy index.html %REPORT_NAME%"
+                        echo "✅ Report renamed to ${env.REPORT_NAME}"
+                    }
+                }
+            }
+        }
+
         stage('Publish HTML Report (Jenkins Viewer)') {
             steps {
-                echo "📊 Publishing Playwright test report in Jenkins..."
+                echo "📊 Publishing Playwright test report..."
                 script {
-                    def reportExists = fileExists("${REPORT_PATH}/index.html")
+                    def reportExists = fileExists('spring-hello/playwright-tests/playwright-report/index.html')
                     if (!reportExists) {
                         error("❌ Playwright report not found. Check test execution.")
                     }
@@ -88,11 +99,20 @@ pipeline {
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: false,
-                    reportDir: "${REPORT_PATH}",
+                    reportDir: 'spring-hello/playwright-tests/playwright-report',
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Test Report',
                     reportTitles: 'Playwright Test Results'
                 ])
+            }
+        }
+
+        stage('Print Local Report Path') {
+            steps {
+                echo "📍 Timestamped report available at:"
+                script {
+                    echo "${WORKSPACE}\\spring-hello\\playwright-tests\\playwright-report\\${env.REPORT_NAME}"
+                }
             }
         }
 
@@ -110,7 +130,7 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                echo "🚀 Deploying to production container..."
+                echo "🚀 Deploying to production..."
                 script {
                     def exists = bat(script: "docker inspect --type container ${PROD_CONTAINER}", returnStatus: true)
                     if (exists == 0) {
@@ -119,19 +139,6 @@ pipeline {
                     }
                     bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
                 }
-            }
-        }
-
-        stage('Serve Report Locally') {
-            steps {
-                echo "🌐 Serving Playwright report on http://localhost:${REPORT_PORT} ..."
-                bat """
-                    cd ${REPORT_PATH}
-                    npx http-server -p ${REPORT_PORT} > nul 2>&1 &
-                    timeout /t 3 > nul
-                """
-                echo "✅ You can open the report in your browser manually:"
-                echo "🔗 http://localhost:${REPORT_PORT}"
             }
         }
     }
@@ -150,7 +157,7 @@ pipeline {
             }
         }
         always {
-            echo "📦 CI/CD Pipeline finished."
+            echo '📦 CI/CD Pipeline finished.'
         }
     }
 }
