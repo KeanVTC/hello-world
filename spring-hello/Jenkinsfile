@@ -55,9 +55,6 @@ pipeline {
         stage('Run E2E Tests') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    echo "🧹 Cleaning up old Playwright report..."
-                    bat 'rmdir /s /q playwright-report || exit 0'
-
                     echo "🚦 Running Playwright E2E tests..."
                     script {
                         def testStatus = bat(
