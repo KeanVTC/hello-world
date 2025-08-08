@@ -56,7 +56,11 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests..."
+
                     script {
+                        // ✅ Clean old report folder before test
+                        bat 'rmdir /s /q playwright-report || exit 0'
+
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_URL}
@@ -64,6 +68,10 @@ pipeline {
                             """,
                             returnStatus: true
                         )
+
+                        // 🕒 Optional delay to ensure report is fully written
+                        bat 'timeout /t 3'
+
                         if (testStatus != 0) {
                             error("❌ Playwright tests failed. Stopping pipeline.")
                         }
@@ -75,12 +83,14 @@ pipeline {
         stage('Publish HTML Report') {
             steps {
                 echo "📊 Publishing Playwright test report..."
+
                 script {
                     def reportExists = fileExists('spring-hello/playwright-tests/playwright-report/index.html')
                     if (!reportExists) {
                         error("❌ Playwright report not found. Check test execution.")
                     }
                 }
+
                 publishHTML(target: [
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
