@@ -8,6 +8,7 @@ pipeline {
         TEST_PORT = '9090'
         PROD_PORT = '9091'
         BASE_URL = "http://localhost:${TEST_PORT}"
+        REPORT_PATH = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\hello-world-pipeline\\spring-hello\\playwright-tests\\playwright-report\\index.html"
     }
 
     stages {
@@ -52,6 +53,15 @@ pipeline {
             }
         }
 
+        stage('Clear Old Report') {
+            steps {
+                dir('spring-hello/playwright-tests') {
+                    echo "🧹 Removing old Playwright report..."
+                    bat 'rmdir /s /q playwright-report || exit 0'
+                }
+            }
+        }
+
         stage('Run E2E Tests') {
             steps {
                 dir('spring-hello/playwright-tests') {
@@ -72,24 +82,10 @@ pipeline {
             }
         }
 
-        stage('Publish HTML Report') {
+        stage('Open Report Locally') {
             steps {
-                echo "📊 Publishing Playwright test report..."
-                script {
-                    def reportExists = fileExists('spring-hello/playwright-tests/playwright-report/index.html')
-                    if (!reportExists) {
-                        error("❌ Playwright report not found. Check test execution.")
-                    }
-                }
-                publishHTML(target: [
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: 'spring-hello/playwright-tests/playwright-report',
-                    reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Test Report',
-                    reportTitles: 'Playwright Test Results'
-                ])
+                echo "🌐 Opening Playwright report in local browser..."
+                bat "start \"\" \"${REPORT_PATH}\""
             }
         }
 
