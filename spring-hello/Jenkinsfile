@@ -12,15 +12,10 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
+                    echo "📦 Building Spring Boot application..."
                     bat 'mvn clean package -DskipTests'
                 }
             }
@@ -29,13 +24,30 @@ pipeline {
         stage('Start Test Container') {
             steps {
                 script {
-                    bat """
-                        docker stop ${TEST_CONTAINER} || exit 0
-                        docker rm ${TEST_CONTAINER} || exit 0
-                        docker build -t spring-hello-image spring-hello
-                        docker run -d --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} spring-hello-image
-                        timeout /t 15
-                    """
+                    echo "🐳 Starting test container..."
+                    def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                    if (exists == 0) {
+                        bat "docker start ${TEST_CONTAINER}"
+                        echo "✅ Reused existing test container."
+                    } else {
+                        dir('spring-hello') {
+                            bat "docker build -t spring-hello:latest ."
+                        }
+                        bat "docker create --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                        bat "docker start ${TEST_CONTAINER}"
+                        echo "🚀 New test container started."
+                    }
+                    sleep time: 20, unit: 'SECONDS'
+                }
+            }
+        }
+
+        stage('Install Playwright') {
+            steps {
+                dir('spring-hello') {
+                    echo "🧪 Installing Playwright..."
+                    bat 'npm ci'
+                    bat 'npx playwright install'
                 }
             }
         }
@@ -44,22 +56,19 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Test)..."
+                    bat 'rmdir /s /q playwright-report-test'
                     script {
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_TEST_URL}
-                                npm ci
-                                npx playwright install --with-deps
                                 npx playwright test --reporter=html --project=chromium
+                                xcopy /E /I /Y playwright-report ..\\playwright-report-test
                             """,
                             returnStatus: true
                         )
                         if (testStatus != 0) {
                             error("❌ Playwright test against test container failed.")
                         }
-
-                        bat 'rmdir /s /q playwright-report-test || exit 0'
-                        bat 'xcopy /E /Y playwright-report playwright-report-test'
                     }
                 }
             }
@@ -69,7 +78,7 @@ pipeline {
             steps {
                 echo "📊 Publishing test report (Test)..."
                 publishHTML(target: [
-                    reportDir: 'spring-hello/playwright-tests/playwright-report-test',
+                    reportDir: 'spring-hello/playwright-report-test',
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Report (Test)',
                     allowMissing: false,
@@ -81,22 +90,27 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                bat """
-                    docker stop ${TEST_CONTAINER}
-                    docker rm ${TEST_CONTAINER}
-                """
+                echo "🛙 Stopping test container..."
+                script {
+                    def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                    if (exists == 0) {
+                        bat "docker stop ${TEST_CONTAINER}"
+                    }
+                }
             }
         }
 
         stage('Deploy to Production') {
             steps {
+                echo "🚀 Deploying to production..."
                 script {
-                    bat """
-                        docker stop ${PROD_CONTAINER} || exit 0
-                        docker rm ${PROD_CONTAINER} || exit 0
-                        docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello-image
-                        timeout /t 15
-                    """
+                    def exists = bat(script: "docker inspect --type container ${PROD_CONTAINER}", returnStatus: true)
+                    if (exists == 0) {
+                        bat "docker stop ${PROD_CONTAINER}"
+                        bat "docker rm ${PROD_CONTAINER}"
+                    }
+                    bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                    sleep time: 15, unit: 'SECONDS'
                 }
             }
         }
@@ -105,20 +119,19 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Production)..."
+                    bat 'rmdir /s /q playwright-report-prod'
                     script {
-                        def prodStatus = bat(
+                        def prodTestStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_PROD_URL}
                                 npx playwright test --reporter=html --project=chromium
+                                xcopy /E /I /Y playwright-report ..\\playwright-report-prod
                             """,
                             returnStatus: true
                         )
-                        if (prodStatus != 0) {
+                        if (prodTestStatus != 0) {
                             error("❌ Playwright test against production failed.")
                         }
-
-                        bat 'rmdir /s /q playwright-report-prod || exit 0'
-                        bat 'xcopy /E /Y playwright-report playwright-report-prod'
                     }
                 }
             }
@@ -128,7 +141,7 @@ pipeline {
             steps {
                 echo "📊 Publishing test report (Production)..."
                 publishHTML(target: [
-                    reportDir: 'spring-hello/playwright-tests/playwright-report-prod',
+                    reportDir: 'spring-hello/playwright-report-prod',
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Report (Production)',
                     allowMissing: false,
@@ -140,14 +153,20 @@ pipeline {
     }
 
     post {
+        success {
+            echo "✅ Pipeline SUCCESS: Application deployed and validated successfully."
+        }
+        failure {
+            echo "❌ Pipeline FAILED. Cleaning up test container..."
+            script {
+                def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                if (exists == 0) {
+                    bat "docker stop ${TEST_CONTAINER}"
+                }
+            }
+        }
         always {
-            echo "🧹 Cleaning up containers..."
-            bat """
-                docker stop ${TEST_CONTAINER} || exit 0
-                docker rm ${TEST_CONTAINER} || exit 0
-                docker stop ${PROD_CONTAINER} || exit 0
-                docker rm ${PROD_CONTAINER} || exit 0
-            """
+            echo '📦 CI/CD Pipeline complete.'
         }
     }
 }
