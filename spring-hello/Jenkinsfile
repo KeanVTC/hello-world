@@ -7,6 +7,7 @@ pipeline {
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
+        BASE_URL = "http://localhost:${TEST_PORT}"
     }
 
     stages {
@@ -44,9 +45,10 @@ pipeline {
         stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
-                    echo "🧪 Installing Playwright..."
+                    echo "🧪 Installing Playwright and http-server..."
                     bat 'npm ci'
                     bat 'npx playwright install'
+                    bat 'npm install http-server --save-dev'
                 }
             }
         }
@@ -55,16 +57,25 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests..."
-                    // Ensure fresh report
-                    bat 'rmdir /s /q playwright-report'
-                    bat 'npx playwright test --reporter=html'
+                    script {
+                        def testStatus = bat(
+                            script: """
+                                set BASE_URL=${env.BASE_URL}
+                                npx playwright test --reporter=html
+                            """,
+                            returnStatus: true
+                        )
+                        if (testStatus != 0) {
+                            error("❌ Playwright tests failed. Stopping pipeline.")
+                        }
+                    }
                 }
             }
         }
 
-        stage('Publish HTML Report to Jenkins') {
+        stage('Publish HTML Report (Jenkins Viewer)') {
             steps {
-                echo "📊 Publishing Playwright test report to Jenkins (optional fallback)..."
+                echo "📊 Publishing Playwright test report..."
                 script {
                     def reportExists = fileExists('spring-hello/playwright-tests/playwright-report/index.html')
                     if (!reportExists) {
@@ -74,21 +85,12 @@ pipeline {
                 publishHTML(target: [
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
-                    keepAll: true,
+                    keepAll: false, // overwrite old report
                     reportDir: 'spring-hello/playwright-tests/playwright-report',
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Test Report',
                     reportTitles: 'Playwright Test Results'
                 ])
-            }
-        }
-
-        stage('Open Playwright Report Locally') {
-            steps {
-                dir('spring-hello/playwright-tests') {
-                    echo "🌐 Opening Playwright report in local browser..."
-                    bat 'npx playwright show-report'
-                }
             }
         }
 
@@ -115,6 +117,19 @@ pipeline {
                     }
                     bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
                 }
+            }
+        }
+
+        stage('Serve and Launch Report (Local Only)') {
+            steps {
+                echo "🌐 Serving report locally via http-server on port 7070..."
+                bat """
+                    cd spring-hello\\playwright-tests\\playwright-report
+                    npx http-server -p 7070 > nul 2>&1 &
+                    timeout /t 3 > nul
+                    start http://localhost:7070
+                """
+                echo "✅ Report hosted at http://localhost:7070"
             }
         }
     }
