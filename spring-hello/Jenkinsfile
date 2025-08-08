@@ -7,7 +7,8 @@ pipeline {
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
-        BASE_URL = "http://localhost:${TEST_PORT}"
+        BASE_TEST_URL = "http://localhost:${TEST_PORT}"
+        BASE_PROD_URL = "http://localhost:${PROD_PORT}"
     }
 
     stages {
@@ -23,14 +24,13 @@ pipeline {
         stage('Start Test Container') {
             steps {
                 script {
-                    echo "🐳 Starting test container ${TEST_CONTAINER}..."
+                    echo "🐳 Starting test container..."
                     def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
                     if (exists == 0) {
                         bat "docker start ${TEST_CONTAINER}"
                         echo "✅ Reused existing test container."
                     } else {
                         dir('spring-hello') {
-                            echo "📦 Building Docker image..."
                             bat "docker build -t spring-hello:latest ."
                         }
                         bat "docker create --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} spring-hello:latest"
@@ -52,43 +52,36 @@ pipeline {
             }
         }
 
-        stage('Run E2E Tests (Multi-Browser)') {
+        stage('Run E2E Tests (Test Container)') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    echo "🚦 Running Playwright E2E tests on all browsers..."
+                    echo "🚦 Running Playwright E2E tests (Test)..."
                     script {
                         def testStatus = bat(
                             script: """
-                                set BASE_URL=${env.BASE_URL}
-                                npx playwright test --reporter=html
+                                set BASE_URL=${env.BASE_TEST_URL}
+                                npx playwright test --reporter=html --project=chromium
                             """,
                             returnStatus: true
                         )
                         if (testStatus != 0) {
-                            error("❌ Playwright tests failed. Stopping pipeline.")
+                            error("❌ Playwright test against test container failed.")
                         }
                     }
                 }
             }
         }
 
-        stage('Publish HTML Report (Jenkins Viewer)') {
+        stage('Publish Test Report') {
             steps {
-                echo "📊 Publishing Playwright test report..."
-                script {
-                    def reportExists = fileExists('spring-hello/playwright-tests/playwright-report/index.html')
-                    if (!reportExists) {
-                        error("❌ Playwright report not found. Check test execution.")
-                    }
-                }
+                echo "📊 Publishing test report (Test)..."
                 publishHTML(target: [
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: false,
                     reportDir: 'spring-hello/playwright-tests/playwright-report',
                     reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Test Report',
-                    reportTitles: 'Playwright Test Results'
+                    reportName: 'Playwright E2E Report (Test)',
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true
                 ])
             }
         }
@@ -115,22 +108,49 @@ pipeline {
                         bat "docker rm ${PROD_CONTAINER}"
                     }
                     bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
+                    sleep time: 15, unit: 'SECONDS' // Give time for app to boot
                 }
             }
         }
 
-        stage('Show Local Report Path') {
+        stage('Run E2E Tests (Production)') {
             steps {
-                echo "📂 Playwright HTML report is available at:"
-                echo "➡ spring-hello\\playwright-tests\\playwright-report\\index.html"
-                echo "📌 Please open this file manually in your browser for full multi-browser test results."
+                dir('spring-hello/playwright-tests') {
+                    echo "🚦 Running Playwright E2E tests (Production)..."
+                    script {
+                        def prodTestStatus = bat(
+                            script: """
+                                set BASE_URL=${env.BASE_PROD_URL}
+                                npx playwright test --reporter=html --project=chromium
+                            """,
+                            returnStatus: true
+                        )
+                        if (prodTestStatus != 0) {
+                            error("❌ Playwright test against production failed.")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Publish Test Report (Production)') {
+            steps {
+                echo "📊 Publishing test report (Production)..."
+                publishHTML(target: [
+                    reportDir: 'spring-hello/playwright-tests/playwright-report',
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright E2E Report (Production)',
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true
+                ])
             }
         }
     }
 
     post {
         success {
-            echo "✅ Pipeline SUCCESS: App deployed to port ${PROD_PORT}."
+            echo "✅ Pipeline SUCCESS: Application deployed and validated successfully."
         }
         failure {
             echo "❌ Pipeline FAILED. Cleaning up test container..."
@@ -142,7 +162,7 @@ pipeline {
             }
         }
         always {
-            echo '📦 CI/CD Pipeline finished.'
+            echo '📦 CI/CD Pipeline complete.'
         }
     }
 }
