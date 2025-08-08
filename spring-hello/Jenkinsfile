@@ -7,8 +7,6 @@ pipeline {
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
-        BASE_URL = "http://localhost:${TEST_PORT}"
-        REPORT_PATH = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\hello-world-pipeline\\spring-hello\\playwright-tests\\playwright-report\\index.html"
     }
 
     stages {
@@ -53,39 +51,44 @@ pipeline {
             }
         }
 
-        stage('Clear Old Report') {
-            steps {
-                dir('spring-hello/playwright-tests') {
-                    echo "🧹 Removing old Playwright report..."
-                    bat 'rmdir /s /q playwright-report || exit 0'
-                }
-            }
-        }
-
         stage('Run E2E Tests') {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests..."
-                    script {
-                        def testStatus = bat(
-                            script: """
-                                set BASE_URL=${env.BASE_URL}
-                                npx playwright test --reporter=html
-                            """,
-                            returnStatus: true
-                        )
-                        if (testStatus != 0) {
-                            error("❌ Playwright tests failed. Stopping pipeline.")
-                        }
-                    }
+                    // Ensure fresh report
+                    bat 'rmdir /s /q playwright-report'
+                    bat 'npx playwright test --reporter=html'
                 }
             }
         }
 
-        stage('Open Report Locally') {
+        stage('Publish HTML Report to Jenkins') {
             steps {
-                echo "🌐 Opening Playwright report in local browser..."
-                bat "start \"\" \"${REPORT_PATH}\""
+                echo "📊 Publishing Playwright test report to Jenkins (optional fallback)..."
+                script {
+                    def reportExists = fileExists('spring-hello/playwright-tests/playwright-report/index.html')
+                    if (!reportExists) {
+                        error("❌ Playwright report not found. Check test execution.")
+                    }
+                }
+                publishHTML(target: [
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'spring-hello/playwright-tests/playwright-report',
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright E2E Test Report',
+                    reportTitles: 'Playwright Test Results'
+                ])
+            }
+        }
+
+        stage('Open Playwright Report Locally') {
+            steps {
+                dir('spring-hello/playwright-tests') {
+                    echo "🌐 Opening Playwright report in local browser..."
+                    bat 'npx playwright show-report'
+                }
             }
         }
 
