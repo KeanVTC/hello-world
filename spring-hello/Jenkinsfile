@@ -58,7 +58,10 @@ pipeline {
                     echo "🚦 Running Playwright E2E tests..."
                     script {
                         def testStatus = bat(
-                            script: "set BASE_URL=${env.BASE_URL} && npx playwright test --reporter=html",
+                            script: """
+                                set BASE_URL=${env.BASE_URL}
+                                npx playwright test --reporter=html
+                            """,
                             returnStatus: true
                         )
                         if (testStatus != 0) {
