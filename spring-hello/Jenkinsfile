@@ -7,7 +7,7 @@ pipeline {
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
-        BASE_URL = "http://localhost:9090"
+        BASE_URL = "http://localhost:${TEST_PORT}"
     }
 
     stages {
@@ -24,8 +24,8 @@ pipeline {
             steps {
                 script {
                     echo "🐳 Starting test container ${TEST_CONTAINER}..."
-                    def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
-                    if (existsStatus == 0) {
+                    def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                    if (exists == 0) {
                         bat "docker start ${TEST_CONTAINER}"
                         echo "✅ Reused existing test container."
                     } else {
@@ -46,7 +46,7 @@ pipeline {
             steps {
                 dir('spring-hello') {
                     echo "🧪 Installing Playwright..."
-                    bat 'npm install'
+                    bat 'npm ci'
                     bat 'npx playwright install'
                 }
             }
@@ -72,6 +72,12 @@ pipeline {
         stage('Publish HTML Report') {
             steps {
                 echo "📊 Publishing Playwright test report..."
+                script {
+                    def reportExists = fileExists('spring-hello/playwright-tests/playwright-report/index.html')
+                    if (!reportExists) {
+                        error("❌ Playwright report not found. Check test execution.")
+                    }
+                }
                 publishHTML(target: [
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
@@ -88,8 +94,8 @@ pipeline {
             steps {
                 echo "🛑 Stopping test container..."
                 script {
-                    def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
-                    if (existsStatus == 0) {
+                    def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                    if (exists == 0) {
                         bat "docker stop ${TEST_CONTAINER}"
                     }
                 }
@@ -100,8 +106,8 @@ pipeline {
             steps {
                 echo "🚀 Deploying to production..."
                 script {
-                    def existsStatus = bat(script: "docker inspect --type container ${PROD_CONTAINER}", returnStatus: true)
-                    if (existsStatus == 0) {
+                    def exists = bat(script: "docker inspect --type container ${PROD_CONTAINER}", returnStatus: true)
+                    if (exists == 0) {
                         bat "docker stop ${PROD_CONTAINER}"
                         bat "docker rm ${PROD_CONTAINER}"
                     }
@@ -118,8 +124,8 @@ pipeline {
         failure {
             echo "❌ Pipeline FAILED. Cleaning up test container..."
             script {
-                def existsStatus = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
-                if (existsStatus == 0) {
+                def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
+                if (exists == 0) {
                     bat "docker stop ${TEST_CONTAINER}"
                 }
             }
