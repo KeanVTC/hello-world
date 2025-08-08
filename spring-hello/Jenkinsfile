@@ -72,20 +72,6 @@ pipeline {
             }
         }
 
-        stage('Rename HTML Report with Timestamp') {
-            steps {
-                dir('spring-hello/playwright-tests/playwright-report') {
-                    echo "📁 Renaming report to include timestamp..."
-                    script {
-                        def timestamp = new Date().format("yyyyMMdd-HHmm")
-                        env.REPORT_NAME = "report-${timestamp}.html"
-                        bat "copy index.html %REPORT_NAME%"
-                        echo "✅ Report renamed to ${env.REPORT_NAME}"
-                    }
-                }
-            }
-        }
-
         stage('Publish HTML Report (Jenkins Viewer)') {
             steps {
                 echo "📊 Publishing Playwright test report..."
@@ -107,11 +93,11 @@ pipeline {
             }
         }
 
-        stage('Print Local Report Path') {
+        stage('Show Local Report Path') {
             steps {
-                echo "📍 Timestamped report available at:"
+                echo "📍 You can manually open the Playwright report from:"
                 script {
-                    echo "${WORKSPACE}\\spring-hello\\playwright-tests\\playwright-report\\${env.REPORT_NAME}"
+                    echo "${WORKSPACE}\\spring-hello\\playwright-tests\\playwright-report\\index.html"
                 }
             }
         }
@@ -157,7 +143,7 @@ pipeline {
             }
         }
         always {
-            echo '📦 CI/CD Pipeline finished.'
+            echo "📦 CI/CD Pipeline finished. Check logs in Console Output tab."
         }
     }
 }
