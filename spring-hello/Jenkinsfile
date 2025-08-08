@@ -7,148 +7,75 @@ pipeline {
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
-        BASE_URL = "http://localhost:${TEST_PORT}"
     }
 
     stages {
         stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
-                    echo "📦 Building Spring Boot application..."
-                    bat 'mvn clean package -DskipTests'
+                    sh 'mvn clean package -DskipTests'
                 }
             }
         }
 
         stage('Start Test Container') {
             steps {
-                script {
-                    echo "🐳 Starting test container ${TEST_CONTAINER}..."
-                    def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
-                    if (exists == 0) {
-                        bat "docker start ${TEST_CONTAINER}"
-                        echo "✅ Reused existing test container."
-                    } else {
-                        dir('spring-hello') {
-                            echo "📦 Building Docker image..."
-                            bat "docker build -t spring-hello:latest ."
-                        }
-                        bat "docker create --name ${TEST_CONTAINER} -p ${TEST_PORT}:${INTERNAL_PORT} spring-hello:latest"
-                        bat "docker start ${TEST_CONTAINER}"
-                        echo "🚀 New test container started."
-                    }
-                    sleep time: 20, unit: 'SECONDS'
-                }
+                sh '''
+                docker rm -f $TEST_CONTAINER || true
+                docker build -t spring-hello-image spring-hello
+                docker run -d --name $TEST_CONTAINER -p $TEST_PORT:$INTERNAL_PORT spring-hello-image
+                '''
+                sleep 10
             }
         }
 
         stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
-                    echo "🧪 Installing Playwright and http-server..."
-                    bat 'npm ci'
-                    bat 'npx playwright install'
-                    bat 'npm install http-server --save-dev'
+                    sh 'npm ci'
+                    sh 'npx playwright install --with-deps'
                 }
             }
         }
 
-        stage('Run E2E Tests') {
+        stage('Run Playwright Tests') {
+            steps {
+                dir('spring-hello') {
+                    sh 'npx playwright test'
+                }
+            }
+        }
+
+        stage('Archive Playwright Report') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    echo "🚦 Running Playwright E2E tests..."
-                    script {
-                        def testStatus = bat(
-                            script: """
-                                set BASE_URL=${env.BASE_URL}
-                                npx playwright test --reporter=html
-                            """,
-                            returnStatus: true
-                        )
-                        if (testStatus != 0) {
-                            error("❌ Playwright tests failed. Stopping pipeline.")
-                        }
-                    }
+                    // No need to open browser — just generate report
+                    sh 'npx playwright show-report --output=playwright-report'
+                    archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true
                 }
-            }
-        }
-
-        stage('Publish HTML Report (Jenkins Viewer)') {
-            steps {
-                echo "📊 Publishing Playwright test report..."
-                script {
-                    def reportExists = fileExists('spring-hello/playwright-tests/playwright-report/index.html')
-                    if (!reportExists) {
-                        error("❌ Playwright report not found. Check test execution.")
-                    }
-                }
-                publishHTML(target: [
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: false, // overwrite old report
-                    reportDir: 'spring-hello/playwright-tests/playwright-report',
-                    reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Test Report',
-                    reportTitles: 'Playwright Test Results'
-                ])
             }
         }
 
         stage('Stop Test Container') {
             steps {
-                echo "🛑 Stopping test container..."
-                script {
-                    def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
-                    if (exists == 0) {
-                        bat "docker stop ${TEST_CONTAINER}"
-                    }
-                }
+                sh 'docker rm -f $TEST_CONTAINER || true'
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                echo "🚀 Deploying to production..."
-                script {
-                    def exists = bat(script: "docker inspect --type container ${PROD_CONTAINER}", returnStatus: true)
-                    if (exists == 0) {
-                        bat "docker stop ${PROD_CONTAINER}"
-                        bat "docker rm ${PROD_CONTAINER}"
-                    }
-                    bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
-                }
-            }
-        }
-
-        stage('Serve and Launch Report (Local Only)') {
-            steps {
-                echo "🌐 Serving report locally via http-server on port 7070..."
-                bat """
-                    cd spring-hello\\playwright-tests\\playwright-report
-                    npx http-server -p 7070 > nul 2>&1 &
-                    timeout /t 3 > nul
-                    start http://localhost:7070
-                """
-                echo "✅ Report hosted at http://localhost:7070"
+                sh '''
+                docker rm -f $PROD_CONTAINER || true
+                docker run -d --name $PROD_CONTAINER -p $PROD_PORT:$INTERNAL_PORT spring-hello-image
+                '''
             }
         }
     }
 
     post {
-        success {
-            echo "✅ Pipeline SUCCESS: App deployed to port ${PROD_PORT}."
-        }
-        failure {
-            echo "❌ Pipeline FAILED. Cleaning up test container..."
-            script {
-                def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
-                if (exists == 0) {
-                    bat "docker stop ${TEST_CONTAINER}"
-                }
-            }
-        }
         always {
-            echo '📦 CI/CD Pipeline finished.'
+            echo "✅ CI/CD complete. To view the Playwright test report:"
+            echo "➡ Go to this Jenkins build → Artifacts → playwright-report → index.html"
         }
     }
 }
