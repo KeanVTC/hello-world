@@ -52,10 +52,10 @@ pipeline {
             }
         }
 
-        stage('Run E2E Tests') {
+        stage('Run E2E Tests (Multi-Browser)') {
             steps {
                 dir('spring-hello/playwright-tests') {
-                    echo "🚦 Running Playwright E2E tests..."
+                    echo "🚦 Running Playwright E2E tests on all browsers..."
                     script {
                         def testStatus = bat(
                             script: """
@@ -93,15 +93,6 @@ pipeline {
             }
         }
 
-        stage('Show Local Report Path') {
-            steps {
-                echo "📍 You can manually open the Playwright report from:"
-                script {
-                    echo "${WORKSPACE}\\spring-hello\\playwright-tests\\playwright-report\\index.html"
-                }
-            }
-        }
-
         stage('Stop Test Container') {
             steps {
                 echo "🛑 Stopping test container..."
@@ -127,6 +118,14 @@ pipeline {
                 }
             }
         }
+
+        stage('Show Local Report Path') {
+            steps {
+                echo "📂 Playwright HTML report is available at:"
+                echo "➡ spring-hello\\playwright-tests\\playwright-report\\index.html"
+                echo "📌 Please open this file manually in your browser for full multi-browser test results."
+            }
+        }
     }
 
     post {
@@ -143,7 +142,7 @@ pipeline {
             }
         }
         always {
-            echo "📦 CI/CD Pipeline finished. Check logs in Console Output tab."
+            echo '📦 CI/CD Pipeline finished.'
         }
     }
 }
