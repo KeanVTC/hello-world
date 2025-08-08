@@ -56,13 +56,11 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Test)..."
-                    bat 'rmdir /s /q playwright-report-test'
                     script {
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_TEST_URL}
                                 npx playwright test --reporter=html --project=chromium
-                                xcopy /E /I /Y playwright-report ..\\playwright-report-test
                             """,
                             returnStatus: true
                         )
@@ -78,7 +76,7 @@ pipeline {
             steps {
                 echo "📊 Publishing test report (Test)..."
                 publishHTML(target: [
-                    reportDir: 'spring-hello/playwright-report-test',
+                    reportDir: 'spring-hello/playwright-tests/playwright-report',
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Report (Test)',
                     allowMissing: false,
@@ -90,7 +88,7 @@ pipeline {
 
         stage('Stop Test Container') {
             steps {
-                echo "🛙 Stopping test container..."
+                echo "🛑 Stopping test container..."
                 script {
                     def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
                     if (exists == 0) {
@@ -110,7 +108,7 @@ pipeline {
                         bat "docker rm ${PROD_CONTAINER}"
                     }
                     bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
-                    sleep time: 15, unit: 'SECONDS'
+                    sleep time: 15, unit: 'SECONDS' // Give time for app to boot
                 }
             }
         }
@@ -119,13 +117,11 @@ pipeline {
             steps {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Production)..."
-                    bat 'rmdir /s /q playwright-report-prod'
                     script {
                         def prodTestStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_PROD_URL}
                                 npx playwright test --reporter=html --project=chromium
-                                xcopy /E /I /Y playwright-report ..\\playwright-report-prod
                             """,
                             returnStatus: true
                         )
@@ -141,7 +137,7 @@ pipeline {
             steps {
                 echo "📊 Publishing test report (Production)..."
                 publishHTML(target: [
-                    reportDir: 'spring-hello/playwright-report-prod',
+                    reportDir: 'spring-hello/playwright-tests/playwright-report',
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Report (Production)',
                     allowMissing: false,
