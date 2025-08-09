@@ -1,32 +1,51 @@
 // spring-hello/playwright-tests/CustomReporter.js
 const fs = require('fs');
 const path = require('path');
+const { Reporter } = require('@playwright/test/reporter');
 
 class CustomReporter {
-  onEnd(result) {
-    // 1. Read title from CSV
-    const csvPath = path.join(__dirname, 'data', 'report_title.csv');
-    let titleFromCSV = 'Test Report';
-    if (fs.existsSync(csvPath)) {
-      const content = fs.readFileSync(csvPath, 'utf-8').trim();
-      if (content) {
-        titleFromCSV = content.split('\n')[0].trim(); // First line only
+  constructor(options) {
+    this.options = options;
+    this.reportTitle = this._readTitleFromCSV();
+  }
+
+  // Read title from CSV file
+  _readTitleFromCSV() {
+    try {
+      const csvPath = path.join(__dirname, 'data', 'report-title.csv');
+      if (!fs.existsSync(csvPath)) {
+        console.warn(`[CustomReporter] CSV file not found: ${csvPath}`);
+        return 'Test Report';
       }
+      const lines = fs.readFileSync(csvPath, 'utf-8').split('\n').filter(Boolean);
+      return lines[0].trim() || 'Test Report';
+    } catch (err) {
+      console.error('[CustomReporter] Failed to read CSV:', err);
+      return 'Test Report';
     }
+  }
 
-    // 2. Get system time
-    const timestamp = new Date().toLocaleString();
+  onEnd(result) {
+    try {
+      // Locate the generated Playwright HTML report
+      const reportPath = path.join(__dirname, 'playwright-report', 'index.html');
+      if (!fs.existsSync(reportPath)) {
+        console.warn('[CustomReporter] Report file not found:', reportPath);
+        return;
+      }
 
-    // 3. Update HTML report
-    const reportPath = path.join(__dirname, 'playwright-report', 'index.html');
-    if (fs.existsSync(reportPath)) {
       let html = fs.readFileSync(reportPath, 'utf-8');
-      html = html.replace(
-        /<h1>.*?<\/h1>/,
-        `<h1>${titleFromCSV} - ${timestamp}</h1>`
-      );
+
+      // Replace the default "Test Report" title with custom one
+      html = html.replace(/<title>.*?<\/title>/, `<title>${this.reportTitle}</title>`);
+
+      // Also replace the visible heading (usually <h1>)
+      html = html.replace(/<h1[^>]*>.*?<\/h1>/, `<h1>${this.reportTitle}</h1>`);
+
       fs.writeFileSync(reportPath, html, 'utf-8');
-      console.log(`✅ Custom title "${titleFromCSV}" applied with timestamp.`);
+      console.log(`[CustomReporter] Report title set to: "${this.reportTitle}"`);
+    } catch (err) {
+      console.error('[CustomReporter] Failed to update report title:', err);
     }
   }
 }

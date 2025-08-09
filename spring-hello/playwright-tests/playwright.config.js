@@ -5,10 +5,9 @@ const fs = require('fs');
 
 // Read title from CSV
 function readTitleFromCSV() {
-  const csvPath = path.join(__dirname, 'report_title.csv');
+  const csvPath = path.join(__dirname, 'data', 'report-title.csv'); // ✅ correct folder & name
   if (!fs.existsSync(csvPath)) return 'Test Report';
   const lines = fs.readFileSync(csvPath, 'utf-8').split('\n').filter(Boolean);
-  // Assume first line is the title
   return lines[0].trim();
 }
 
