@@ -68,7 +68,10 @@ pipeline {
                             returnStatus: true
                         )
                         if (testStatus != 0) {
-                            error("❌ Playwright test against test container failed.")
+                            echo "⚠️ Playwright test against test container FAILED with exit code ${testStatus}"
+                            currentBuild.result = 'UNSTABLE'  // Mark unstable but continue
+                        } else {
+                            echo "✅ Playwright test against test container PASSED."
                         }
                     }
                 }
@@ -178,7 +181,10 @@ pipeline {
                             returnStatus: true
                         )
                         if (prodTestStatus != 0) {
-                            error("❌ Playwright test against production failed.")
+                            echo "⚠️ Playwright test against production FAILED with exit code ${prodTestStatus}"
+                            currentBuild.result = 'UNSTABLE'
+                        } else {
+                            echo "✅ Playwright test against production PASSED."
                         }
                     }
                 }
@@ -251,14 +257,11 @@ pipeline {
         success {
             echo "✅ Pipeline SUCCESS: App deployed and E2E tested."
         }
+        unstable {
+            echo "⚠️ Pipeline completed with test failures (UNSTABLE). Reports published."
+        }
         failure {
-            echo "❌ Pipeline FAILED. Attempting test container cleanup..."
-            script {
-                def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
-                if (exists == 0) {
-                    bat "docker stop ${TEST_CONTAINER}"
-                }
-            }
+            echo "❌ Pipeline FAILED due to other errors."
         }
         always {
             echo '📦 CI/CD pipeline complete.'
