@@ -10,7 +10,8 @@ pipeline {
         BASE_TEST_URL = "http://localhost:${TEST_PORT}"
         BASE_PROD_URL = "http://localhost:${PROD_PORT}"
         PLAYWRIGHT_TEST_DIR = 'spring-hello/playwright-tests'
-        REPORT_DIR = "${PLAYWRIGHT_TEST_DIR}/playwright-report"
+        REPORT_DIR_TEST = "${PLAYWRIGHT_TEST_DIR}/playwright-report-test"
+        REPORT_DIR_PROD = "${PLAYWRIGHT_TEST_DIR}/playwright-report-prod"
     }
 
     stages {
@@ -61,11 +62,12 @@ pipeline {
                     script {
                         env.BASE_URL = BASE_TEST_URL
                         env.REPORT_TITLE = "Test Report"
+                        env.PLAYWRIGHT_REPORT_DIR = REPORT_DIR_TEST
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_URL}
                                 set REPORT_TITLE=${env.REPORT_TITLE}
-                                npx playwright test --project=chromium --project=firefox --project=webkit
+                                npx playwright test --project=chromium --project=firefox --project=webkit --reporter=html:${env.PLAYWRIGHT_REPORT_DIR}
                             """,
                             returnStatus: true
                         )
@@ -81,7 +83,7 @@ pipeline {
             steps {
                 script {
                     def title = env.REPORT_TITLE ?: "Playwright Test Report"
-                    def reportFile = "${env.WORKSPACE}\\${REPORT_DIR}\\index.html"
+                    def reportFile = "${env.WORKSPACE}\\${REPORT_DIR_TEST}\\index.html"
                     echo "🔧 Injecting custom report title: ${title} into ${reportFile}"
 
                     def html = readFile(reportFile)
@@ -97,7 +99,7 @@ pipeline {
                 script {
                     echo "📂 Archiving Test container report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I /Y \"${REPORT_DIR}\" \"${PLAYWRIGHT_TEST_DIR}\\playwright-report-test-${ts}\""
+                    bat "xcopy /E /I /Y \"${REPORT_DIR_TEST}\" \"${PLAYWRIGHT_TEST_DIR}\\playwright-report-test-${ts}\""
                 }
             }
         }
@@ -106,7 +108,7 @@ pipeline {
             steps {
                 echo "📊 Publishing Playwright test report (Test Container)..."
                 publishHTML(target: [
-                    reportDir: REPORT_DIR,
+                    reportDir: REPORT_DIR_TEST,
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Report - Test Container',
                     alwaysLinkToLastBuild: true,
@@ -149,11 +151,12 @@ pipeline {
                     script {
                         env.BASE_URL = BASE_PROD_URL
                         env.REPORT_TITLE = "Production Report"
+                        env.PLAYWRIGHT_REPORT_DIR = REPORT_DIR_PROD
                         def prodTestStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_URL}
                                 set REPORT_TITLE=${env.REPORT_TITLE}
-                                npx playwright test --project=chromium --project=firefox --project=webkit
+                                npx playwright test --project=chromium --project=firefox --project=webkit --reporter=html:${env.PLAYWRIGHT_REPORT_DIR}
                             """,
                             returnStatus: true
                         )
@@ -169,7 +172,7 @@ pipeline {
             steps {
                 script {
                     def title = env.REPORT_TITLE ?: "Playwright Production Report"
-                    def reportFile = "${env.WORKSPACE}\\${REPORT_DIR}\\index.html"
+                    def reportFile = "${env.WORKSPACE}\\${REPORT_DIR_PROD}\\index.html"
                     echo "🔧 Injecting custom report title: ${title} into ${reportFile}"
 
                     def html = readFile(reportFile)
@@ -185,7 +188,7 @@ pipeline {
                 script {
                     echo "📂 Archiving Production report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I /Y \"${REPORT_DIR}\" \"${PLAYWRIGHT_TEST_DIR}\\playwright-report-prod-${ts}\""
+                    bat "xcopy /E /I /Y \"${REPORT_DIR_PROD}\" \"${PLAYWRIGHT_TEST_DIR}\\playwright-report-prod-${ts}\""
                 }
             }
         }
@@ -194,7 +197,7 @@ pipeline {
             steps {
                 echo "📊 Publishing Playwright test report (Production)..."
                 publishHTML(target: [
-                    reportDir: REPORT_DIR,
+                    reportDir: REPORT_DIR_PROD,
                     reportFiles: 'index.html',
                     reportName: 'Playwright E2E Report - Production',
                     alwaysLinkToLastBuild: true,
