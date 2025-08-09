@@ -3,29 +3,31 @@ const fs = require('fs');
 const path = require('path');
 
 class CustomReporter {
-  constructor(options) {
-    this.reportTitle = options?.reportTitle || 'Test Report';
-  }
+  onEnd(result) {
+    // 1. Read title from CSV
+    const csvPath = path.join(__dirname, 'data', 'report_title.csv');
+    let titleFromCSV = 'Test Report';
+    if (fs.existsSync(csvPath)) {
+      const content = fs.readFileSync(csvPath, 'utf-8').trim();
+      if (content) {
+        titleFromCSV = content.split('\n')[0].trim(); // First line only
+      }
+    }
 
-  async onEnd(result) {
-    const reportPath = path.join(process.cwd(), 'spring-hello', 'playwright-report', 'index.html');
-    if (!fs.existsSync(reportPath)) return;
-
-    let html = fs.readFileSync(reportPath, 'utf-8');
-
-    // Inject title with timestamp
+    // 2. Get system time
     const timestamp = new Date().toLocaleString();
-    const customTitle = `${this.reportTitle} - ${timestamp}`;
-    html = html.replace(/<title>.*<\/title>/, `<title>${customTitle}</title>`);
 
-    // Optionally insert into body header
-    html = html.replace(
-      /<body[^>]*>/,
-      `$&<h1 style="text-align:center; margin-top:20px;">${customTitle}</h1>`
-    );
-
-    fs.writeFileSync(reportPath, html, 'utf-8');
-    console.log(`✅ Custom report title applied: ${customTitle}`);
+    // 3. Update HTML report
+    const reportPath = path.join(__dirname, 'playwright-report', 'index.html');
+    if (fs.existsSync(reportPath)) {
+      let html = fs.readFileSync(reportPath, 'utf-8');
+      html = html.replace(
+        /<h1>.*?<\/h1>/,
+        `<h1>${titleFromCSV} - ${timestamp}</h1>`
+      );
+      fs.writeFileSync(reportPath, html, 'utf-8');
+      console.log(`✅ Custom title "${titleFromCSV}" applied with timestamp.`);
+    }
   }
 }
 
