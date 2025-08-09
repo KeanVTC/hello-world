@@ -3,7 +3,7 @@ const path = require('path');
 
 module.exports = defineConfig({
   reporter: [
-    [path.join(__dirname, 'CustomReporter.js'), { reportTitle: 'Static Test Report Title' }],
+    [path.join(__dirname, 'CustomReporter.js')],
     ['html', { outputFolder: 'playwright-report', open: 'never' }]
   ],
   projects: [
