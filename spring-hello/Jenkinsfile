@@ -74,13 +74,6 @@ pipeline {
             }
         }
 
-        stage('Open Test Container URL') {
-            steps {
-                echo "🌐 Opening Test Container URL in browser..."
-                bat "start http://localhost:${TEST_PORT}/hello"
-            }
-        }
-
         stage('Install Playwright') {
             steps {
                 dir('spring-hello') {
@@ -202,13 +195,6 @@ pipeline {
                     bat "docker run -d --name ${PROD_CONTAINER} -p ${PROD_PORT}:${INTERNAL_PORT} spring-hello:latest"
                     sleep time: 15, unit: 'SECONDS'
                 }
-            }
-        }
-
-        stage('Open Production Container URL') {
-            steps {
-                echo "🌐 Opening Production Container URL in browser..."
-                bat "start http://localhost:${PROD_PORT}/hello"
             }
         }
 
