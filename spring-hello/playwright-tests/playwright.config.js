@@ -1,8 +1,11 @@
+// spring-hello/playwright-tests/playwright.config.js
+const { defineConfig } = require('@playwright/test');
 const path = require('path');
 
-module.exports = {
+module.exports = defineConfig({
   reporter: [
-    [path.join(__dirname, 'CustomReporter.js')]
+    [path.join(__dirname, 'CustomReporter.js')],
+    ['html', { outputFolder: 'playwright-report', open: 'never' }]
   ],
   projects: [
     { name: 'Chromium', use: { browserName: 'chromium' } },
@@ -11,6 +14,6 @@ module.exports = {
   ],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:9090',
-    headless: true,
+    headless: true
   },
-};
+});

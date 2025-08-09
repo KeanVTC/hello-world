@@ -7,8 +7,9 @@ pipeline {
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
-        PLAYWRIGHT_REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'     // Default HTML reporter output
-        CUSTOM_REPORT_DIR = 'spring-hello/playwright-tests/custom-report'              // Your custom reporter output
+        BASE_TEST_URL = "http://localhost:${TEST_PORT}"
+        BASE_PROD_URL = "http://localhost:${PROD_PORT}"
+        REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
     }
 
     stages {
@@ -57,12 +58,11 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Test)..."
                     script {
-                        env.BASE_URL = "http://localhost:${TEST_PORT}"
-                        env.REPORT_TYPE = "test"
+                        env.REPORT_TITLE = "Test Container E2E Tests"
                         def testStatus = bat(
                             script: """
-                                set BASE_URL=${env.BASE_URL}
-                                set REPORT_TYPE=${env.REPORT_TYPE}
+                                set BASE_URL=${env.BASE_TEST_URL}
+                                set REPORT_TITLE=${env.REPORT_TITLE}
                                 npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
@@ -75,46 +75,64 @@ pipeline {
             }
         }
 
-        stage('Archive Test Reports') {
+        stage('Create Report Wrapper (Test)') {
             steps {
                 script {
-                    echo "📂 Archiving Test container reports..."
-                    def ts = new Date().format("yyyyMMdd-HHmmss")
-
-                    // Archive default Playwright HTML report
-                    bat "xcopy /E /I /Y \"${PLAYWRIGHT_REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-test-${ts}\""
-
-                    // Archive custom report folder if exists
-                    bat "if exist \"${CUSTOM_REPORT_DIR}\" xcopy /E /I /Y \"${CUSTOM_REPORT_DIR}\" \"spring-hello/playwright-tests/custom-report-test-${ts}\""
+                    def wrapperContent = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Test Container E2E Tests Report</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    iframe {
+      width: 100%;
+      height: 90vh;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h1>Test Container E2E Tests Report</h1>
+  <iframe src="index.html" frameborder="0"></iframe>
+</body>
+</html>
+"""
+                    writeFile file: "${env.REPORT_DIR}/wrapper.html", text: wrapperContent
+                    echo "✅ wrapper.html created in ${env.REPORT_DIR}"
                 }
             }
         }
 
-        stage('Publish Test Reports') {
+        stage('Archive Test Report') {
             steps {
-                echo "📊 Publishing Playwright test reports (Test)..."
+                script {
+                    echo "📂 Archiving Test container report..."
+                    def ts = new Date().format("yyyyMMdd-HHmmss")
+                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-test-${ts}\""
+                }
+            }
+        }
+
+        stage('Publish Test Report') {
+            steps {
+                echo "📊 Publishing Playwright test report (Test)..."
                 publishHTML(target: [
-                    reportDir: "${PLAYWRIGHT_REPORT_DIR}",
-                    reportFiles: 'index.html',
+                    reportDir: "${REPORT_DIR}",
+                    reportFiles: 'wrapper.html',
                     reportName: "Playwright E2E Report - Test Container",
-                    allowMissing: true,
+                    allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true
                 ])
-
-                // Publish custom report if exists
-                script {
-                    if (fileExists("${CUSTOM_REPORT_DIR}/report.html")) {
-                        publishHTML(target: [
-                            reportDir: "${CUSTOM_REPORT_DIR}",
-                            reportFiles: 'report.html',
-                            reportName: "Custom Playwright HTML Report - Test Container",
-                            allowMissing: true,
-                            alwaysLinkToLastBuild: true,
-                            keepAll: true
-                        ])
-                    }
-                }
             }
         }
 
@@ -150,12 +168,11 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Production)..."
                     script {
-                        env.BASE_URL = "http://localhost:${PROD_PORT}"
-                        env.REPORT_TYPE = "prod"
+                        env.REPORT_TITLE = "Production E2E Tests"
                         def prodTestStatus = bat(
                             script: """
-                                set BASE_URL=${env.BASE_URL}
-                                set REPORT_TYPE=${env.REPORT_TYPE}
+                                set BASE_URL=${env.BASE_PROD_URL}
+                                set REPORT_TITLE=${env.REPORT_TITLE}
                                 npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
@@ -168,46 +185,64 @@ pipeline {
             }
         }
 
-        stage('Archive Production Reports') {
+        stage('Create Report Wrapper (Production)') {
             steps {
                 script {
-                    echo "📂 Archiving Production reports..."
-                    def ts = new Date().format("yyyyMMdd-HHmmss")
-
-                    // Archive default Playwright HTML report
-                    bat "xcopy /E /I /Y \"${PLAYWRIGHT_REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-prod-${ts}\""
-
-                    // Archive custom report folder if exists
-                    bat "if exist \"${CUSTOM_REPORT_DIR}\" xcopy /E /I /Y \"${CUSTOM_REPORT_DIR}\" \"spring-hello/playwright-tests/custom-report-prod-${ts}\""
+                    def wrapperContent = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Production E2E Tests Report</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    iframe {
+      width: 100%;
+      height: 90vh;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h1>Production E2E Tests Report</h1>
+  <iframe src="index.html" frameborder="0"></iframe>
+</body>
+</html>
+"""
+                    writeFile file: "${env.REPORT_DIR}/wrapper.html", text: wrapperContent
+                    echo "✅ wrapper.html created in ${env.REPORT_DIR}"
                 }
             }
         }
 
-        stage('Publish Production Reports') {
+        stage('Archive Production Report') {
             steps {
-                echo "📊 Publishing Playwright test reports (Production)..."
+                script {
+                    echo "📂 Archiving Production report..."
+                    def ts = new Date().format("yyyyMMdd-HHmmss")
+                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-prod-${ts}\""
+                }
+            }
+        }
+
+        stage('Publish Production Report') {
+            steps {
+                echo "📊 Publishing Playwright test report (Production)..."
                 publishHTML(target: [
-                    reportDir: "${PLAYWRIGHT_REPORT_DIR}",
-                    reportFiles: 'index.html',
+                    reportDir: "${REPORT_DIR}",
+                    reportFiles: 'wrapper.html',
                     reportName: "Playwright E2E Report - Production",
-                    allowMissing: true,
+                    allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true
                 ])
-
-                // Publish custom report if exists
-                script {
-                    if (fileExists("${CUSTOM_REPORT_DIR}/report.html")) {
-                        publishHTML(target: [
-                            reportDir: "${CUSTOM_REPORT_DIR}",
-                            reportFiles: 'report.html',
-                            reportName: "Custom Playwright HTML Report - Production",
-                            allowMissing: true,
-                            alwaysLinkToLastBuild: true,
-                            keepAll: true
-                        ])
-                    }
-                }
             }
         }
     }
