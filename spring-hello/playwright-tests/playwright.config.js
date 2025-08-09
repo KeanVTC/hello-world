@@ -1,44 +1,18 @@
-const fs = require('fs');
+const { defineConfig } = require('@playwright/test');
 const path = require('path');
 
-class CustomReporter {
-  constructor(options) {
-    // Get the title from options or fallback to default
-    this.reportTitle = options.reportTitle || 'Playwright Test Report';
-  }
-
-  onBegin(config, suite) {
-    const timestamp = new Date().toISOString();
-    console.log(`🚀 Test run started at: ${timestamp}`);
-
-    const reportDir = path.join(__dirname, 'custom-report');
-    if (!fs.existsSync(reportDir)) {
-      fs.mkdirSync(reportDir, { recursive: true });
-    }
-
-    fs.writeFileSync(
-      path.join(reportDir, 'report.html'),
-      `<html><head><title>${this.reportTitle}</title></head>` +
-      `<body><h1>${this.reportTitle}</h1><p>Started: ${timestamp}</p><ul>`
-    );
-  }
-
-  onTestBegin(test) {
-    console.log(`🧪 Starting test: ${test.title}`);
-    fs.appendFileSync(
-      path.join(__dirname, 'custom-report', 'report.html'),
-      `<li>Test: ${test.title}</li>`
-    );
-  }
-
-  onEnd(result) {
-    const endTime = new Date().toISOString();
-    fs.appendFileSync(
-      path.join(__dirname, 'custom-report', 'report.html'),
-      `</ul><p>Ended: ${endTime}</p></body></html>`
-    );
-    console.log(`✅ Test run finished at: ${endTime}`);
-  }
-}
-
-module.exports = CustomReporter;
+module.exports = defineConfig({
+  reporter: [
+    [path.join(__dirname, 'CustomReporter.js'), { reportTitle: 'Static Test Report Title' }],
+    ['html', { outputFolder: 'playwright-report', open: 'never' }]
+  ],
+  projects: [
+    { name: 'Chromium', use: { browserName: 'chromium' } },
+    { name: 'Firefox', use: { browserName: 'firefox' } },
+    { name: 'WebKit', use: { browserName: 'webkit' } }
+  ],
+  use: {
+    baseURL: process.env.BASE_URL || 'http://localhost:9090',
+    headless: true,
+  },
+});
