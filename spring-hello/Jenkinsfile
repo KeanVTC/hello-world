@@ -7,9 +7,9 @@ pipeline {
         INTERNAL_PORT = '8086'
         TEST_PORT = '9090'
         PROD_PORT = '9091'
-        PLAYWRIGHT_TEST_DIR = 'spring-hello/playwright-tests'
-        REPORT_DIR_TEST = "${PLAYWRIGHT_TEST_DIR}/playwright-report-test"
-        REPORT_DIR_PROD = "${PLAYWRIGHT_TEST_DIR}/playwright-report-prod"
+        BASE_TEST_URL = "http://localhost:${TEST_PORT}"
+        BASE_PROD_URL = "http://localhost:${PROD_PORT}"
+        REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
     }
 
     stages {
@@ -55,35 +55,22 @@ pipeline {
 
         stage('Run E2E Tests (Test Container)') {
             steps {
-                dir(PLAYWRIGHT_TEST_DIR) {
-                    echo "🚦 Running Playwright E2E tests (Test Container)..."
+                dir('spring-hello/playwright-tests') {
+                    echo "🚦 Running Playwright E2E tests (Test)..."
                     script {
-                        env.BASE_URL = "http://localhost:${TEST_PORT}"
-                        env.REPORT_TITLE = "Test Report"
-                        def status = bat(
+                        env.REPORT_TITLE = "Test Container E2E Tests"
+                        def testStatus = bat(
                             script: """
-                                set BASE_URL=${env.BASE_URL}
+                                set BASE_URL=${env.BASE_TEST_URL}
                                 set REPORT_TITLE=${env.REPORT_TITLE}
-                                npx playwright test --project=chromium --project=firefox --project=webkit --reporter=html:${REPORT_DIR_TEST}
+                                npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
                         )
-                        if (status != 0) error("❌ Playwright test (Test Container) failed.")
+                        if (testStatus != 0) {
+                            error("❌ Playwright test against test container failed.")
+                        }
                     }
-                }
-            }
-        }
-
-        stage('Inject Report Title (Test Container)') {
-            steps {
-                script {
-                    def title = env.REPORT_TITLE ?: "Playwright Test Report"
-                    def reportFile = "${env.WORKSPACE}\\${REPORT_DIR_TEST}\\index.html"
-                    echo "🔧 Injecting custom report title into ${reportFile}"
-                    def html = readFile(reportFile)
-                    html = html.replaceAll(/<title>.*?<\/title>/, "<title>${title}</title>")
-                    html = html.replaceAll(/<h1.*?>.*?<\/h1>/, "<h1>${title}</h1>")
-                    writeFile(file: reportFile, text: html)
                 }
             }
         }
@@ -91,20 +78,21 @@ pipeline {
         stage('Archive Test Report') {
             steps {
                 script {
-                    echo "📂 Archiving Test report..."
+                    echo "📂 Archiving Test container report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I /Y \"${REPORT_DIR_TEST}\" \"${PLAYWRIGHT_TEST_DIR}\\playwright-report-test-${ts}\""
+                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-test-${ts}\""
                 }
             }
         }
 
         stage('Publish Test Report') {
             steps {
-                echo "📊 Publishing Test report..."
+                echo "📊 Publishing Playwright test report (Test)..."
                 publishHTML(target: [
-                    reportDir: REPORT_DIR_TEST,
+                    reportDir: "${REPORT_DIR}",
                     reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Report - Test Container',
+                    reportName: "Playwright E2E Report - Test Container",
+                    allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true
                 ])
@@ -140,35 +128,22 @@ pipeline {
 
         stage('Run E2E Tests (Production)') {
             steps {
-                dir(PLAYWRIGHT_TEST_DIR) {
+                dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Production)..."
                     script {
-                        env.BASE_URL = "http://localhost:${PROD_PORT}"
-                        env.REPORT_TITLE = "Production Report"
-                        def status = bat(
+                        env.REPORT_TITLE = "Production E2E Tests"
+                        def prodTestStatus = bat(
                             script: """
-                                set BASE_URL=${env.BASE_URL}
+                                set BASE_URL=${env.BASE_PROD_URL}
                                 set REPORT_TITLE=${env.REPORT_TITLE}
-                                npx playwright test --project=chromium --project=firefox --project=webkit --reporter=html:${REPORT_DIR_PROD}
+                                npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
                         )
-                        if (status != 0) error("❌ Playwright test (Production) failed.")
+                        if (prodTestStatus != 0) {
+                            error("❌ Playwright test against production failed.")
+                        }
                     }
-                }
-            }
-        }
-
-        stage('Inject Report Title (Production)') {
-            steps {
-                script {
-                    def title = env.REPORT_TITLE ?: "Playwright Production Report"
-                    def reportFile = "${env.WORKSPACE}\\${REPORT_DIR_PROD}\\index.html"
-                    echo "🔧 Injecting custom report title into ${reportFile}"
-                    def html = readFile(reportFile)
-                    html = html.replaceAll(/<title>.*?<\/title>/, "<title>${title}</title>")
-                    html = html.replaceAll(/<h1.*?>.*?<\/h1>/, "<h1>${title}</h1>")
-                    writeFile(file: reportFile, text: html)
                 }
             }
         }
@@ -178,18 +153,19 @@ pipeline {
                 script {
                     echo "📂 Archiving Production report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I /Y \"${REPORT_DIR_PROD}\" \"${PLAYWRIGHT_TEST_DIR}\\playwright-report-prod-${ts}\""
+                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-prod-${ts}\""
                 }
             }
         }
 
         stage('Publish Production Report') {
             steps {
-                echo "📊 Publishing Production report..."
+                echo "📊 Publishing Playwright test report (Production)..."
                 publishHTML(target: [
-                    reportDir: REPORT_DIR_PROD,
+                    reportDir: "${REPORT_DIR}",
                     reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Report - Production',
+                    reportName: "Playwright E2E Report - Production",
+                    allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true
                 ])
@@ -202,7 +178,7 @@ pipeline {
             echo "✅ Pipeline SUCCESS: App deployed and E2E tested."
         }
         failure {
-            echo "❌ Pipeline FAILED. Cleaning up test container..."
+            echo "❌ Pipeline FAILED. Attempting test container cleanup..."
             script {
                 def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
                 if (exists == 0) {
@@ -211,7 +187,7 @@ pipeline {
             }
         }
         always {
-            echo "📦 CI/CD pipeline complete."
+            echo '📦 CI/CD pipeline complete.'
         }
     }
 }

@@ -1,13 +1,10 @@
+// spring-hello/playwright-tests/playwright.config.js
 const { defineConfig } = require('@playwright/test');
 const path = require('path');
-const fs = require('fs');
-
-// Read title from env var or fallback
-const reportTitle = process.env.REPORT_TITLE || 'Default Playwright Report';
 
 module.exports = defineConfig({
   reporter: [
-    [path.join(__dirname, 'CustomReporter.js'), { reportTitle }],
+    [path.join(__dirname, 'CustomReporter.js')],
     ['html', { outputFolder: 'playwright-report', open: 'never' }]
   ],
   projects: [
@@ -17,6 +14,6 @@ module.exports = defineConfig({
   ],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:9090',
-    headless: true,
+    headless: true
   },
 });
