@@ -10,7 +10,7 @@ pipeline {
         BASE_TEST_URL = "http://localhost:${TEST_PORT}"
         BASE_PROD_URL = "http://localhost:${PROD_PORT}"
         PLAYWRIGHT_TEST_DIR = 'spring-hello/playwright-tests'
-        CUSTOM_REPORT_DIR = "${PLAYWRIGHT_TEST_DIR}/custom-report"
+        REPORT_DIR = "${PLAYWRIGHT_TEST_DIR}/playwright-report"
     }
 
     stages {
@@ -77,23 +77,38 @@ pipeline {
             }
         }
 
+        stage('Inject Report Title (Test Container)') {
+            steps {
+                script {
+                    def title = env.REPORT_TITLE ?: "Playwright Test Report"
+                    def reportFile = "${env.WORKSPACE}\\${REPORT_DIR}\\index.html"
+                    echo "🔧 Injecting custom report title: ${title} into ${reportFile}"
+
+                    def html = readFile(reportFile)
+                    html = html.replaceAll(/<title>.*?<\/title>/, "<title>${title}</title>")
+                    html = html.replaceAll(/<h1.*?>.*?<\/h1>/, "<h1>${title}</h1>")
+                    writeFile(file: reportFile, text: html)
+                }
+            }
+        }
+
         stage('Archive Test Report') {
             steps {
                 script {
-                    echo "📂 Archiving Test container custom report..."
+                    echo "📂 Archiving Test container report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I /Y \"${CUSTOM_REPORT_DIR}\" \"${PLAYWRIGHT_TEST_DIR}\\custom-report-test-${ts}\""
+                    bat "xcopy /E /I /Y \"${REPORT_DIR}\" \"${PLAYWRIGHT_TEST_DIR}\\playwright-report-test-${ts}\""
                 }
             }
         }
 
         stage('Publish Test Report') {
             steps {
-                echo "📊 Publishing Playwright custom test report..."
+                echo "📊 Publishing Playwright test report (Test Container)..."
                 publishHTML(target: [
-                    reportDir: CUSTOM_REPORT_DIR,
-                    reportFiles: 'report.html',
-                    reportName: 'Playwright Custom Report - Test Container',
+                    reportDir: REPORT_DIR,
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright E2E Report - Test Container',
                     alwaysLinkToLastBuild: true,
                     keepAll: true
                 ])
@@ -150,23 +165,38 @@ pipeline {
             }
         }
 
+        stage('Inject Report Title (Production)') {
+            steps {
+                script {
+                    def title = env.REPORT_TITLE ?: "Playwright Production Report"
+                    def reportFile = "${env.WORKSPACE}\\${REPORT_DIR}\\index.html"
+                    echo "🔧 Injecting custom report title: ${title} into ${reportFile}"
+
+                    def html = readFile(reportFile)
+                    html = html.replaceAll(/<title>.*?<\/title>/, "<title>${title}</title>")
+                    html = html.replaceAll(/<h1.*?>.*?<\/h1>/, "<h1>${title}</h1>")
+                    writeFile(file: reportFile, text: html)
+                }
+            }
+        }
+
         stage('Archive Production Report') {
             steps {
                 script {
-                    echo "📂 Archiving Production custom report..."
+                    echo "📂 Archiving Production report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I /Y \"${CUSTOM_REPORT_DIR}\" \"${PLAYWRIGHT_TEST_DIR}\\custom-report-prod-${ts}\""
+                    bat "xcopy /E /I /Y \"${REPORT_DIR}\" \"${PLAYWRIGHT_TEST_DIR}\\playwright-report-prod-${ts}\""
                 }
             }
         }
 
         stage('Publish Production Report') {
             steps {
-                echo "📊 Publishing Playwright custom production report..."
+                echo "📊 Publishing Playwright test report (Production)..."
                 publishHTML(target: [
-                    reportDir: CUSTOM_REPORT_DIR,
-                    reportFiles: 'report.html',
-                    reportName: 'Playwright Custom Report - Production',
+                    reportDir: REPORT_DIR,
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright E2E Report - Production',
                     alwaysLinkToLastBuild: true,
                     keepAll: true
                 ])
