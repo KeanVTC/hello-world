@@ -1,11 +1,9 @@
 const { defineConfig } = require('@playwright/test');
 const path = require('path');
 
-const staticReportTitle = 'Static Test Report Title';
-
 module.exports = defineConfig({
   reporter: [
-    [path.join(__dirname, 'CustomReporter.js'), { reportTitle: staticReportTitle }],
+    [path.join(__dirname, 'CustomReporter.js')],
     ['html', { outputFolder: 'playwright-report', open: 'never' }]
   ],
   projects: [
