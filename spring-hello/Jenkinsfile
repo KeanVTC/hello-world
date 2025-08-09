@@ -58,10 +58,12 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Test)..."
                     script {
+                        env.REPORT_TITLE = "Test Container E2E Tests"
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_TEST_URL}
-                                npx playwright test --reporter=html --project=chromium --project=firefox --project=webkit
+                                set REPORT_TITLE=${env.REPORT_TITLE}
+                                npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
                         )
@@ -73,13 +75,13 @@ pipeline {
             }
         }
 
-        stage('Publish Shared Report') {
+        stage('Publish Test Report') {
             steps {
-                echo "📊 Publishing shared Playwright test report..."
+                echo "📊 Publishing Playwright test report (Test)..."
                 publishHTML(target: [
                     reportDir: "${REPORT_DIR}",
                     reportFiles: 'index.html',
-                    reportName: 'Playwright E2E Report (All)',
+                    reportName: "Playwright E2E Report - Test Container",
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true
@@ -119,10 +121,12 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Production)..."
                     script {
+                        env.REPORT_TITLE = "Production E2E Tests"
                         def prodTestStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_PROD_URL}
-                                npx playwright test --reporter=html --project=chromium --project=firefox --project=webkit
+                                set REPORT_TITLE=${env.REPORT_TITLE}
+                                npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
                         )
@@ -131,6 +135,20 @@ pipeline {
                         }
                     }
                 }
+            }
+        }
+
+        stage('Publish Production Report') {
+            steps {
+                echo "📊 Publishing Playwright test report (Production)..."
+                publishHTML(target: [
+                    reportDir: "${REPORT_DIR}",
+                    reportFiles: 'index.html',
+                    reportName: "Playwright E2E Report - Production",
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true
+                ])
             }
         }
     }
