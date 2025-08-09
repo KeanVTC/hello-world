@@ -12,19 +12,6 @@ pipeline {
         REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
     }
 
-    // Helper function to read title from CSV
-    def getTitleForEnv(String envName) {
-        def csvPath = 'spring-hello/playwright-tests/data/report-title.csv'
-        def lines = readFile(csvPath).split('\n')
-        for (int i = 1; i < lines.size(); i++) {  // skip header
-            def parts = lines[i].split(',')
-            if (parts[0].trim().toLowerCase() == envName.toLowerCase()) {
-                return parts[1].trim()
-            }
-        }
-        return "Playwright E2E Tests Report"  // fallback title
-    }
-
     stages {
         stage('Build Spring Boot App') {
             steps {
@@ -91,13 +78,12 @@ pipeline {
         stage('Create Report Wrapper (Test)') {
             steps {
                 script {
-                    def title = getTitleForEnv('test')
                     def wrapperContent = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>${title}</title>
+  <title>Test Container E2E Tests Report</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -115,13 +101,13 @@ pipeline {
   </style>
 </head>
 <body>
-  <h1>${title}</h1>
+  <h1>Test Container E2E Tests Report</h1>
   <iframe src="index.html" frameborder="0"></iframe>
 </body>
 </html>
 """
                     writeFile file: "${env.REPORT_DIR}/wrapper.html", text: wrapperContent
-                    echo "✅ wrapper.html created in ${env.REPORT_DIR} with title: ${title}"
+                    echo "✅ wrapper.html created in ${env.REPORT_DIR}"
                 }
             }
         }
@@ -202,13 +188,12 @@ pipeline {
         stage('Create Report Wrapper (Production)') {
             steps {
                 script {
-                    def title = getTitleForEnv('production')
                     def wrapperContent = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>${title}</title>
+  <title>Production E2E Tests Report</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -226,13 +211,13 @@ pipeline {
   </style>
 </head>
 <body>
-  <h1>${title}</h1>
+  <h1>Production E2E Tests Report</h1>
   <iframe src="index.html" frameborder="0"></iframe>
 </body>
 </html>
 """
                     writeFile file: "${env.REPORT_DIR}/wrapper.html", text: wrapperContent
-                    echo "✅ wrapper.html created in ${env.REPORT_DIR} with title: ${title}"
+                    echo "✅ wrapper.html created in ${env.REPORT_DIR}"
                 }
             }
         }
