@@ -75,6 +75,16 @@ pipeline {
             }
         }
 
+        stage('Archive Test Report') {
+            steps {
+                script {
+                    echo "📂 Archiving Test container report..."
+                    def ts = new Date().format("yyyyMMdd-HHmmss")
+                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-test-${ts}\""
+                }
+            }
+        }
+
         stage('Publish Test Report') {
             steps {
                 echo "📊 Publishing Playwright test report (Test)..."
@@ -134,6 +144,16 @@ pipeline {
                             error("❌ Playwright test against production failed.")
                         }
                     }
+                }
+            }
+        }
+
+        stage('Archive Production Report') {
+            steps {
+                script {
+                    echo "📂 Archiving Production report..."
+                    def ts = new Date().format("yyyyMMdd-HHmmss")
+                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-prod-${ts}\""
                 }
             }
         }
