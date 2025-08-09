@@ -10,6 +10,37 @@ pipeline {
         BASE_TEST_URL = "http://localhost:${TEST_PORT}"
         BASE_PROD_URL = "http://localhost:${PROD_PORT}"
         REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
+        CSV_TITLES_PATH = 'spring-hello/playwright-tests/data/report_titles.csv'
+    }
+
+    // Helper function to read CSV and get report title by env name
+    def getReportTitle(envName) {
+        def csvFile = "${env.WORKSPACE}/${CSV_TITLES_PATH}"
+        def title = ""
+
+        if (!fileExists(csvFile)) {
+            error "CSV file with report titles not found at ${csvFile}"
+        }
+
+        def lines = readFile(csvFile).split('\n')
+        def headers = lines[0].split(',')
+
+        def envIndex = headers.findIndexOf { it.trim() == "env" }
+        def titleIndex = headers.findIndexOf { it.trim() == "report_title" }
+
+        for (int i = 1; i < lines.size(); i++) {
+            def cols = lines[i].split(',')
+            if (cols[envIndex].trim() == envName) {
+                title = cols[titleIndex].trim()
+                break
+            }
+        }
+
+        if (title == "") {
+            error "No report title found for environment '${envName}' in CSV."
+        }
+
+        return title
     }
 
     stages {
@@ -58,7 +89,8 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Test)..."
                     script {
-                        env.REPORT_TITLE = "Test Container E2E Tests"
+                        def title = getReportTitle("test")
+                        env.REPORT_TITLE = title
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_TEST_URL}
@@ -69,7 +101,7 @@ pipeline {
                         )
                         if (testStatus != 0) {
                             echo "⚠️ Playwright test against test container FAILED with exit code ${testStatus}"
-                            currentBuild.result = 'UNSTABLE'  // Mark unstable but continue
+                            currentBuild.result = 'UNSTABLE'
                         } else {
                             echo "✅ Playwright test against test container PASSED."
                         }
@@ -81,12 +113,14 @@ pipeline {
         stage('Create Report Wrapper (Test)') {
             steps {
                 script {
+                    def title = getReportTitle("test")
+                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
                     def wrapperContent = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Test Container E2E Tests Report</title>
+  <title>${title}</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -96,6 +130,11 @@ pipeline {
       text-align: center;
       margin-bottom: 20px;
     }
+    p {
+      text-align: center;
+      font-style: italic;
+      color: #555;
+    }
     iframe {
       width: 100%;
       height: 90vh;
@@ -104,7 +143,8 @@ pipeline {
   </style>
 </head>
 <body>
-  <h1>Test Container E2E Tests Report</h1>
+  <h1>${title}</h1>
+  <p>Test run timestamp: ${timestamp}</p>
   <iframe src="index.html" frameborder="0"></iframe>
 </body>
 </html>
@@ -171,7 +211,8 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Production)..."
                     script {
-                        env.REPORT_TITLE = "Production E2E Tests"
+                        def title = getReportTitle("prod")
+                        env.REPORT_TITLE = title
                         def prodTestStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_PROD_URL}
@@ -194,12 +235,14 @@ pipeline {
         stage('Create Report Wrapper (Production)') {
             steps {
                 script {
+                    def title = getReportTitle("prod")
+                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
                     def wrapperContent = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Production E2E Tests Report</title>
+  <title>${title}</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -209,6 +252,11 @@ pipeline {
       text-align: center;
       margin-bottom: 20px;
     }
+    p {
+      text-align: center;
+      font-style: italic;
+      color: #555;
+    }
     iframe {
       width: 100%;
       height: 90vh;
@@ -217,7 +265,8 @@ pipeline {
   </style>
 </head>
 <body>
-  <h1>Production E2E Tests Report</h1>
+  <h1>${title}</h1>
+  <p>Test run timestamp: ${timestamp}</p>
   <iframe src="index.html" frameborder="0"></iframe>
 </body>
 </html>
