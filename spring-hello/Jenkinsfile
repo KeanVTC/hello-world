@@ -13,37 +13,37 @@ pipeline {
         CSV_TITLES_PATH = 'spring-hello/playwright-tests/data/report_titles.csv'
     }
 
-    // Helper function to read CSV and get report title by env name
-    def getReportTitle(envName) {
-        def csvFile = "${env.WORKSPACE}/${CSV_TITLES_PATH}"
-        def title = ""
-
-        if (!fileExists(csvFile)) {
-            error "CSV file with report titles not found at ${csvFile}"
-        }
-
-        def lines = readFile(csvFile).split('\n')
-        def headers = lines[0].split(',')
-
-        def envIndex = headers.findIndexOf { it.trim() == "env" }
-        def titleIndex = headers.findIndexOf { it.trim() == "report_title" }
-
-        for (int i = 1; i < lines.size(); i++) {
-            def cols = lines[i].split(',')
-            if (cols[envIndex].trim() == envName) {
-                title = cols[titleIndex].trim()
-                break
+    stages {
+        stage('Initialize') {
+            steps {
+                script {
+                    getReportTitle = { envName ->
+                        def csvFile = "${env.WORKSPACE}/${CSV_TITLES_PATH}"
+                        if (!fileExists(csvFile)) {
+                            error "CSV file with report titles not found at ${csvFile}"
+                        }
+                        def lines = readFile(csvFile).split('\n')
+                        def headers = lines[0].split(',')
+                        def envIndex = headers.findIndexOf { it.trim() == "env" }
+                        def titleIndex = headers.findIndexOf { it.trim() == "report_title" }
+                        def title = ""
+                        for (int i = 1; i < lines.size(); i++) {
+                            def cols = lines[i].split(',')
+                            if (cols[envIndex].trim() == envName) {
+                                title = cols[titleIndex].trim()
+                                break
+                            }
+                        }
+                        if (title == "") {
+                            error "No report title found for environment '${envName}' in CSV."
+                        }
+                        return title
+                    }
+                    echo "✅ Initialized getReportTitle helper"
+                }
             }
         }
 
-        if (title == "") {
-            error "No report title found for environment '${envName}' in CSV."
-        }
-
-        return title
-    }
-
-    stages {
         stage('Build Spring Boot App') {
             steps {
                 dir('spring-hello') {
@@ -113,14 +113,12 @@ pipeline {
         stage('Create Report Wrapper (Test)') {
             steps {
                 script {
-                    def title = getReportTitle("test")
-                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
                     def wrapperContent = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>${title}</title>
+  <title>${env.REPORT_TITLE}</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -130,11 +128,6 @@ pipeline {
       text-align: center;
       margin-bottom: 20px;
     }
-    p {
-      text-align: center;
-      font-style: italic;
-      color: #555;
-    }
     iframe {
       width: 100%;
       height: 90vh;
@@ -143,8 +136,7 @@ pipeline {
   </style>
 </head>
 <body>
-  <h1>${title}</h1>
-  <p>Test run timestamp: ${timestamp}</p>
+  <h1>${env.REPORT_TITLE}</h1>
   <iframe src="index.html" frameborder="0"></iframe>
 </body>
 </html>
@@ -235,14 +227,12 @@ pipeline {
         stage('Create Report Wrapper (Production)') {
             steps {
                 script {
-                    def title = getReportTitle("prod")
-                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
                     def wrapperContent = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>${title}</title>
+  <title>${env.REPORT_TITLE}</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -252,11 +242,6 @@ pipeline {
       text-align: center;
       margin-bottom: 20px;
     }
-    p {
-      text-align: center;
-      font-style: italic;
-      color: #555;
-    }
     iframe {
       width: 100%;
       height: 90vh;
@@ -265,8 +250,7 @@ pipeline {
   </style>
 </head>
 <body>
-  <h1>${title}</h1>
-  <p>Test run timestamp: ${timestamp}</p>
+  <h1>${env.REPORT_TITLE}</h1>
   <iframe src="index.html" frameborder="0"></iframe>
 </body>
 </html>
