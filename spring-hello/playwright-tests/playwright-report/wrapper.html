@@ -1,26 +1,47 @@
+stage('Create Report Wrapper (Test)') {
+    steps {
+        script {
+            def wrapperContent = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>My Fixed Playwright Report Title</title>
+  <title>${env.REPORT_TITLE}</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: #fff;
+      color: #24292e;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
     }
-    h1 {
+    header {
+      background-color: #0c62fe;
+      color: white;
+      padding: 16px 24px;
+      font-size: 1.5rem;
+      font-weight: 600;
       text-align: center;
-      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgb(12 98 254 / 0.3);
     }
     iframe {
+      flex-grow: 1;
+      border: none;
       width: 100%;
-      height: 90vh;
-      border: 1px solid #ccc;
+      height: 100%;
     }
   </style>
 </head>
 <body>
-  <h1>My Fixed Playwright Report Title</h1>
-  <iframe src="index.html" frameborder="0"></iframe>
+  <header>${env.REPORT_TITLE}</header>
+  <iframe src="index.html"></iframe>
 </body>
 </html>
+"""
+            writeFile file: "${env.REPORT_DIR}/wrapper.html", text: wrapperContent
+            echo "✅ wrapper.html created in ${env.REPORT_DIR}"
+        }
+    }
+}
