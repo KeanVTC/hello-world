@@ -3,6 +3,34 @@ const fs = require('fs');
 const path = require('path');
 
 class CustomReporter {
+  constructor() {
+    // Read type from environment variable (set in Jenkins or local run)
+    this.reportType = process.env.REPORT_TYPE || 'test'; 
+    this.reportTitle = this.loadTitleFromCSV();
+  }
+
+  loadTitleFromCSV() {
+    const csvPath = path.join(__dirname, 'report-title.csv');
+    if (!fs.existsSync(csvPath)) {
+      console.warn('⚠ CSV file not found, using default title.');
+      return 'Playwright Test Report';
+    }
+
+    const csvData = fs.readFileSync(csvPath, 'utf8')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.startsWith('#'));
+
+    for (const row of csvData) {
+      const [type, title] = row.split(',');
+      if (type && title && type.trim() === this.reportType) {
+        return title.trim();
+      }
+    }
+
+    return 'Playwright Test Report';
+  }
+
   onBegin(config, suite) {
     const timestamp = new Date().toISOString();
     console.log(`🚀 Test run started at: ${timestamp}`);
@@ -14,7 +42,7 @@ class CustomReporter {
     }
     fs.writeFileSync(
       path.join(reportDir, 'report.html'),
-      `<html><head><title>Playwright Test Report</title></head><body><h1>Playwright Test Report</h1><p>Started: ${timestamp}</p><ul>`
+      `<html><head><title>${this.reportTitle}</title></head><body><h1>${this.reportTitle} - ${timestamp}</h1><ul>`
     );
   }
 
