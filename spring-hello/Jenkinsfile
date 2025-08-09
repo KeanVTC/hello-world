@@ -9,7 +9,8 @@ pipeline {
         PROD_PORT = '9091'
         BASE_TEST_URL = "http://localhost:${TEST_PORT}"
         BASE_PROD_URL = "http://localhost:${PROD_PORT}"
-        REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
+        PLAYWRIGHT_TEST_DIR = 'spring-hello/playwright-tests'
+        CUSTOM_REPORT_DIR = "${PLAYWRIGHT_TEST_DIR}/custom-report"
     }
 
     stages {
@@ -55,13 +56,14 @@ pipeline {
 
         stage('Run E2E Tests (Test Container)') {
             steps {
-                dir('spring-hello/playwright-tests') {
-                    echo "🚦 Running Playwright E2E tests (Test)..."
+                dir(PLAYWRIGHT_TEST_DIR) {
+                    echo "🚦 Running Playwright E2E tests (Test Container)..."
                     script {
-                        env.REPORT_TITLE = "Test Container E2E Tests"
+                        env.BASE_URL = BASE_TEST_URL
+                        env.REPORT_TITLE = "Test Report"
                         def testStatus = bat(
                             script: """
-                                set BASE_URL=${env.BASE_TEST_URL}
+                                set BASE_URL=${env.BASE_URL}
                                 set REPORT_TITLE=${env.REPORT_TITLE}
                                 npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
@@ -78,21 +80,20 @@ pipeline {
         stage('Archive Test Report') {
             steps {
                 script {
-                    echo "📂 Archiving Test container report..."
+                    echo "📂 Archiving Test container custom report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-test-${ts}\""
+                    bat "xcopy /E /I /Y \"${CUSTOM_REPORT_DIR}\" \"${PLAYWRIGHT_TEST_DIR}\\custom-report-test-${ts}\""
                 }
             }
         }
 
         stage('Publish Test Report') {
             steps {
-                echo "📊 Publishing Playwright test report (Test)..."
+                echo "📊 Publishing Playwright custom test report..."
                 publishHTML(target: [
-                    reportDir: "${REPORT_DIR}",
-                    reportFiles: 'index.html',
-                    reportName: "Playwright E2E Report - Test Container",
-                    allowMissing: false,
+                    reportDir: CUSTOM_REPORT_DIR,
+                    reportFiles: 'report.html',
+                    reportName: 'Playwright Custom Report - Test Container',
                     alwaysLinkToLastBuild: true,
                     keepAll: true
                 ])
@@ -128,13 +129,14 @@ pipeline {
 
         stage('Run E2E Tests (Production)') {
             steps {
-                dir('spring-hello/playwright-tests') {
+                dir(PLAYWRIGHT_TEST_DIR) {
                     echo "🚦 Running Playwright E2E tests (Production)..."
                     script {
-                        env.REPORT_TITLE = "Production E2E Tests"
+                        env.BASE_URL = BASE_PROD_URL
+                        env.REPORT_TITLE = "Production Report"
                         def prodTestStatus = bat(
                             script: """
-                                set BASE_URL=${env.BASE_PROD_URL}
+                                set BASE_URL=${env.BASE_URL}
                                 set REPORT_TITLE=${env.REPORT_TITLE}
                                 npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
@@ -151,21 +153,20 @@ pipeline {
         stage('Archive Production Report') {
             steps {
                 script {
-                    echo "📂 Archiving Production report..."
+                    echo "📂 Archiving Production custom report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-prod-${ts}\""
+                    bat "xcopy /E /I /Y \"${CUSTOM_REPORT_DIR}\" \"${PLAYWRIGHT_TEST_DIR}\\custom-report-prod-${ts}\""
                 }
             }
         }
 
         stage('Publish Production Report') {
             steps {
-                echo "📊 Publishing Playwright test report (Production)..."
+                echo "📊 Publishing Playwright custom production report..."
                 publishHTML(target: [
-                    reportDir: "${REPORT_DIR}",
-                    reportFiles: 'index.html',
-                    reportName: "Playwright E2E Report - Production",
-                    allowMissing: false,
+                    reportDir: CUSTOM_REPORT_DIR,
+                    reportFiles: 'report.html',
+                    reportName: 'Playwright Custom Report - Production',
                     alwaysLinkToLastBuild: true,
                     keepAll: true
                 ])
@@ -178,7 +179,7 @@ pipeline {
             echo "✅ Pipeline SUCCESS: App deployed and E2E tested."
         }
         failure {
-            echo "❌ Pipeline FAILED. Attempting test container cleanup..."
+            echo "❌ Pipeline FAILED. Attempting cleanup..."
             script {
                 def exists = bat(script: "docker inspect --type container ${TEST_CONTAINER}", returnStatus: true)
                 if (exists == 0) {
@@ -187,7 +188,7 @@ pipeline {
             }
         }
         always {
-            echo '📦 CI/CD pipeline complete.'
+            echo "📦 CI/CD pipeline complete."
         }
     }
 }
