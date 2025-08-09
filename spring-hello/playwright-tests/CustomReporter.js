@@ -3,64 +3,29 @@ const fs = require('fs');
 const path = require('path');
 
 class CustomReporter {
-  constructor() {
-    // Read type from environment variable (set in Jenkins or local run)
-    this.reportType = process.env.REPORT_TYPE || 'test'; 
-    this.reportTitle = this.loadTitleFromCSV();
+  constructor(options) {
+    this.reportTitle = options?.reportTitle || 'Test Report';
   }
 
-  loadTitleFromCSV() {
-    const csvPath = path.join(__dirname, 'report-title.csv');
-    if (!fs.existsSync(csvPath)) {
-      console.warn('⚠ CSV file not found, using default title.');
-      return 'Playwright Test Report';
-    }
+  async onEnd(result) {
+    const reportPath = path.join(process.cwd(), 'spring-hello', 'playwright-report', 'index.html');
+    if (!fs.existsSync(reportPath)) return;
 
-    const csvData = fs.readFileSync(csvPath, 'utf8')
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0 && !line.startsWith('#'));
+    let html = fs.readFileSync(reportPath, 'utf-8');
 
-    for (const row of csvData) {
-      const [type, title] = row.split(',');
-      if (type && title && type.trim() === this.reportType) {
-        return title.trim();
-      }
-    }
+    // Inject title with timestamp
+    const timestamp = new Date().toLocaleString();
+    const customTitle = `${this.reportTitle} - ${timestamp}`;
+    html = html.replace(/<title>.*<\/title>/, `<title>${customTitle}</title>`);
 
-    return 'Playwright Test Report';
-  }
-
-  onBegin(config, suite) {
-    const timestamp = new Date().toISOString();
-    console.log(`🚀 Test run started at: ${timestamp}`);
-    this.startTime = timestamp;
-
-    const reportDir = path.join(__dirname, 'custom-report');
-    if (!fs.existsSync(reportDir)) {
-      fs.mkdirSync(reportDir, { recursive: true });
-    }
-    fs.writeFileSync(
-      path.join(reportDir, 'report.html'),
-      `<html><head><title>${this.reportTitle}</title></head><body><h1>${this.reportTitle} - ${timestamp}</h1><ul>`
+    // Optionally insert into body header
+    html = html.replace(
+      /<body[^>]*>/,
+      `$&<h1 style="text-align:center; margin-top:20px;">${customTitle}</h1>`
     );
-  }
 
-  onTestBegin(test) {
-    console.log(`🧪 Starting test: ${test.title}`);
-    fs.appendFileSync(
-      path.join(__dirname, 'custom-report', 'report.html'),
-      `<li>Test: ${test.title}</li>`
-    );
-  }
-
-  onEnd(result) {
-    const endTime = new Date().toISOString();
-    fs.appendFileSync(
-      path.join(__dirname, 'custom-report', 'report.html'),
-      `</ul><p>Ended: ${endTime}</p></body></html>`
-    );
-    console.log(`✅ Test run finished at: ${endTime}`);
+    fs.writeFileSync(reportPath, html, 'utf-8');
+    console.log(`✅ Custom report title applied: ${customTitle}`);
   }
 }
 
