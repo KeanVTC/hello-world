@@ -58,11 +58,11 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Test)..."
                     script {
-                        env.REPORT_TITLE = "Test Container E2E Tests"
+                        env.REPORT_TYPE = "test"
                         def testStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_TEST_URL}
-                                set REPORT_TITLE=${env.REPORT_TITLE}
+                                set REPORT_TYPE=${env.REPORT_TYPE}
                                 npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
@@ -80,7 +80,7 @@ pipeline {
                 script {
                     echo "📂 Archiving Test container report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-test-${ts}\""
+                    bat "xcopy /E /I /Y \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-test-${ts}\""
                 }
             }
         }
@@ -131,11 +131,11 @@ pipeline {
                 dir('spring-hello/playwright-tests') {
                     echo "🚦 Running Playwright E2E tests (Production)..."
                     script {
-                        env.REPORT_TITLE = "Production E2E Tests"
+                        env.REPORT_TYPE = "prod"
                         def prodTestStatus = bat(
                             script: """
                                 set BASE_URL=${env.BASE_PROD_URL}
-                                set REPORT_TITLE=${env.REPORT_TITLE}
+                                set REPORT_TYPE=${env.REPORT_TYPE}
                                 npx playwright test --project=chromium --project=firefox --project=webkit
                             """,
                             returnStatus: true
@@ -153,7 +153,7 @@ pipeline {
                 script {
                     echo "📂 Archiving Production report..."
                     def ts = new Date().format("yyyyMMdd-HHmmss")
-                    bat "xcopy /E /I \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-prod-${ts}\""
+                    bat "xcopy /E /I /Y \"${REPORT_DIR}\" \"spring-hello/playwright-tests/playwright-report-prod-${ts}\""
                 }
             }
         }

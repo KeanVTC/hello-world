@@ -1,8 +1,11 @@
-// spring-hello/playwright-tests/CustomReporter.js
 const fs = require('fs');
 const path = require('path');
 
 class CustomReporter {
+  constructor(options) {
+    this.reportTitle = (options && options.reportTitle) || 'Playwright Test Report';
+  }
+
   onBegin(config, suite) {
     const timestamp = new Date().toISOString();
     console.log(`🚀 Test run started at: ${timestamp}`);
@@ -14,7 +17,9 @@ class CustomReporter {
     }
     fs.writeFileSync(
       path.join(reportDir, 'report.html'),
-      `<html><head><title>Playwright Test Report</title></head><body><h1>Playwright Test Report</h1><p>Started: ${timestamp}</p><ul>`
+      `<html><head><title>${this.reportTitle}</title></head>` +
+      `<body><h1>${this.reportTitle}</h1>` +
+      `<p>Started: ${timestamp} — Title: ${this.reportTitle}</p><ul>`
     );
   }
 
@@ -30,7 +35,7 @@ class CustomReporter {
     const endTime = new Date().toISOString();
     fs.appendFileSync(
       path.join(__dirname, 'custom-report', 'report.html'),
-      `</ul><p>Ended: ${endTime}</p></body></html>`
+      `</ul><p>Ended: ${endTime} — Title: ${this.reportTitle}</p></body></html>`
     );
     console.log(`✅ Test run finished at: ${endTime}`);
   }
