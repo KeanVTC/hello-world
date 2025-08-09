@@ -9,7 +9,7 @@ pipeline {
         PROD_PORT = '9091'
         BASE_TEST_URL = "http://localhost:${TEST_PORT}"
         BASE_PROD_URL = "http://localhost:${PROD_PORT}"
-        REPORT_DIR = 'spring-hello/playwright-tests/playwright-report'
+        REPORT_DIR = 'spring-hello/playwright-tests/custom-report'  // <- updated to your custom report folder
     }
 
     stages {
